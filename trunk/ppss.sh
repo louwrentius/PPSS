@@ -45,7 +45,7 @@ RUNNING_SIGNAL="$0_is_running"
 GLOBAL_LOCK="PPSS-$RANDOM-$RANDOM"
 PAUSE_SIGNAL="pause.txt"
 ARRAY_POINTER_FILE="array-pointer-$RANDOM-$RANDOM"
-JOB_LOG="job_log"
+JOB_LOG_DIR="job_log"
 MAX_DELAY=2
 PERCENT="0"
 PID="$$"
@@ -182,7 +182,7 @@ function is_running {
     if [ -e "$RUNNING_SIGNAL" ]
     then
         echo 
-        log INFO "$0 is already running"
+        log INFO "$0 is already running (lock file exists)."
         echo
         exit 1
     fi
@@ -281,9 +281,9 @@ function init_vars {
         MAX_NO_OF_RUNNING_JOBS=`get_no_of_cpus $HYPERTHREADING`
     fi
 
-    if [ ! -e "$JOB_LOG" ]
+    if [ ! -e "$JOB_LOG_DIR" ]
     then
-        mkdir "$JOB_LOG"
+        mkdir "$JOB_LOG_DIR"
     fi
 }
 
@@ -491,12 +491,12 @@ function commando {
 
     ITEM="$1"
 
-    if [ -e "$JOB_LOG/$ITEM" ]
+    if [ -e "$JOB_LOG_DIR/$ITEM" ]
     then
         log DEBUG "Skipping item $ITEM - already processed." # <-- disabled because of possible performance penalty.
     else
         #log DEBUG "Starting command on item $ITEM."  # <-- disabled because of possible performance penalty.
-        EXECME='$COMMAND "$ITEM" > "$JOB_LOG/$ITEM"'
+        EXECME='$COMMAND "$ITEM" > "$JOB_LOG_DIR/$ITEM"'
         eval "$EXECME"
     fi
 
