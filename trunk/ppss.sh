@@ -50,6 +50,7 @@ MAX_DELAY=2
 PERCENT="0"
 PID="$$"
 LISTENER_PID=""
+IFS_BACKUP="$IFS"
 
 function showusage {
     
@@ -131,50 +132,6 @@ function cleanup {
 }
 
 
-function get_no_of_cpus {
-
-    # Use hyperthreading or not?
-    HPT=$1
-    NUMBER=""
-
-    if [ -z "$HPT" ]
-    then
-        HPT=no
-    fi
-
-    if [ "$HPT" == "yes" ]
-    then
-        if [ `uname` == "Linux" ]
-        then
-            NUMBER=`cat /proc/cpuinfo | grep processor | wc -l`
-        elif [ `uname` == "Darwin" ]
-        then
-            NUMBER=`sysctl -a hw | grep -w logicalcpu | awk '{ print $2 }'`
-        else
-            NUMBER=`cat /proc/cpuinfo | grep processor | wc -l`
-        fi
-    elif [ "$HPT" == "no" ]
-    then
-        if [ `uname` == "Linux" ]
-        then
-            NUMBER=`cat /proc/cpuinfo | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g`
-        elif [ `uname` == "Darwin" ]
-        then
-            NUMBER=`sysctl -a hw | grep -w physicalcpu | awk '{ print $2 }'`
-        else
-            NUMBER=`cat /proc/cpuinfo | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g`
-        fi
-
-    fi
-
-    if [ ! -z "$NUMBER" ]
-    then
-        echo "$NUMBER"
-    else
-        echo "$FUNCNAME ERROR - number of CPUs not obtained."
-        exit 1
-    fi
-}
 
 # check if ppss is already running.
 function is_running {
@@ -324,6 +281,76 @@ function log {
 
 }
 
+function get_no_of_cpus {
+
+    # Use hyperthreading or not?
+    HPT=$1
+    NUMBER=""
+
+    if [ -z "$HPT" ]
+    then
+        HPT=no
+    fi
+
+    if [ "$HPT" == "yes" ]
+    then
+        if [ `uname` == "Linux" ]
+        then
+            NUMBER=`cat /proc/cpuinfo | grep processor | wc -l`
+            if [ ! "$?" == "0" ]
+            then
+                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
+            fi
+        elif [ `uname` == "Darwin" ]
+        then
+            NUMBER=`sysctl -a hw | grep -w logicalcpu | awk '{ print $2 }'`
+            if [ ! "$?" == "0" ]
+            then
+                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
+            fi
+        else
+            NUMBER=`cat /proc/cpuinfo | grep processor | wc -l`
+            if [ ! "$?" == "0" ]
+            then
+                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
+            fi
+        fi
+    elif [ "$HPT" == "no" ]
+    then
+        if [ `uname` == "Linux" ]
+        then
+            NUMBER=`cat /proc/cpuinfo | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g`
+            if [ ! "$?" == "0" ]
+            then
+                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
+            fi
+        elif [ `uname` == "Darwin" ]
+        then
+            NUMBER=`sysctl -a hw | grep -w physicalcpu | awk '{ print $2 }'`
+            if [ ! "$?" == "0" ]
+            then
+                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
+            fi
+        else
+            NUMBER=`cat /proc/cpuinfo | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g`
+            if [ ! "$?" == "0" ]
+            then
+                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
+            fi
+        fi
+
+    fi
+
+    if [ ! -z "$NUMBER" ]
+    then
+        echo "$NUMBER"
+    else
+        log INFO "$FUNCNAME ERROR - number of CPUs not obtained."
+        exit 1
+    fi
+}
+
+
 function random_delay {
 
     ARGS="$1"
@@ -399,11 +426,14 @@ function get_all_items {
     if [ -z "$INPUT_FILE" ]
     then
         ITEMS=`ls -1 $SRC_DIR`
+        IFS="
+"
         for x in $ITEMS
         do
-            ARRAY[$count]=$x
+            ARRAY[$count]="$x"
             ((count++))
         done
+        IFS=$IFS_BACKUP
     else
         exec 10<$INPUT_FILE
 
@@ -496,7 +526,7 @@ function commando {
         log DEBUG "Skipping item $ITEM - already processed." # <-- disabled because of possible performance penalty.
     else
         #log DEBUG "Starting command on item $ITEM."  # <-- disabled because of possible performance penalty.
-        EXECME='$COMMAND "$ITEM" > "$JOB_LOG_DIR/$ITEM"'
+        EXECME='$COMMAND"$ITEM" > "$JOB_LOG_DIR/$ITEM"'
         eval "$EXECME"
     fi
 
