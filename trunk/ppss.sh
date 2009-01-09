@@ -39,7 +39,7 @@ trap 'kill_process; ' INT
 
 # Setting some vars. Do not change. 
 SCRIPT_NAME="Parallel Processing Shell Script"
-SCRIPT_VERSION="1.03"
+SCRIPT_VERSION="1.04"
 
 RUNNING_SIGNAL="$0_is_running"
 GLOBAL_LOCK="PPSS-$RANDOM-$RANDOM"
