@@ -281,6 +281,20 @@ function log {
 
 }
 
+function check_status {
+
+    ERROR="$1"
+    FUNCTION="$2"
+    MESSAGE="$3"
+
+    if [ ! "$ERROR" == "0" ]
+    then
+        log INFO "$FUNCTION - $MESSAGE"
+        exit 1
+    fi
+
+}
+
 function get_no_of_cpus {
 
     # Use hyperthreading or not?
@@ -292,51 +306,49 @@ function get_no_of_cpus {
         HPT=no
     fi
 
+    function got_cpu_info {
+
+    ERROR="$1"
+    check_status "$ERROR" "$FUNCNAME" "cannot determine number of cpu cores. Please specify a number of parallell processes manually with -p." 
+
+    }
+
     if [ "$HPT" == "yes" ]
     then
         if [ `uname` == "Linux" ]
         then
-            NUMBER=`cat /proc/cpuinfo | grep processor | wc -l`
-            if [ ! "$?" == "0" ]
-            then
-                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
-            fi
+            NUMBER=`cat /proc/cpuinfoo | grep processor | wc -l`
+            got_cpu_info "$?"
+            
         elif [ `uname` == "Darwin" ]
         then
             NUMBER=`sysctl -a hw | grep -w logicalcpu | awk '{ print $2 }'`
-            if [ ! "$?" == "0" ]
-            then
-                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
-            fi
+            got_cpu_info "$?"
+        elif [ `uname` == "FreeBSD" ]
+        then
+            NUMBER=`sysctl hw.ncpu | awk '{ print $2 }'`
+            got_cpu_info "$?"
         else
             NUMBER=`cat /proc/cpuinfo | grep processor | wc -l`
-            if [ ! "$?" == "0" ]
-            then
-                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
-            fi
+            got_cpu_info "$?"
         fi
     elif [ "$HPT" == "no" ]
     then
         if [ `uname` == "Linux" ]
         then
             NUMBER=`cat /proc/cpuinfo | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g`
-            if [ ! "$?" == "0" ]
-            then
-                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
-            fi
+            got_cpu_info "$?"
         elif [ `uname` == "Darwin" ]
         then
             NUMBER=`sysctl -a hw | grep -w physicalcpu | awk '{ print $2 }'`
-            if [ ! "$?" == "0" ]
-            then
-                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
-            fi
+            got_cpu_info "$?"
+        elif [ `uname` == "FreeBSD" ]
+        then
+            NUMBER=`sysctl hw.ncpu | awk '{ print $2 }'`
+            got_cpu_info "$?"
         else
             NUMBER=`cat /proc/cpuinfo | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g`
-            if [ ! "$?" == "0" ]
-            then
-                log INFO "$FUNCNAME - cannot determine number of cpu core. Please specify manually with -p." 
-            fi
+            got_cpu_info "$?"
         fi
 
     fi
