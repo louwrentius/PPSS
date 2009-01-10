@@ -52,7 +52,7 @@ PID="$$"
 LISTENER_PID=""
 IFS_BACKUP="$IFS"
 
-function showusage {
+showusage () {
     
     echo 
     echo "$SCRIPT_NAME"
@@ -79,7 +79,7 @@ function showusage {
     
 }
 
-function kill_process {
+kill_process () {
 
     kill $LISTENER_PID >> /dev/null 2>&1
     while true
@@ -106,7 +106,7 @@ function kill_process {
 }
 
 
-function cleanup {
+cleanup () {
 
     log DEBUG "$FUNCNAME - Cleaning up all temp files and processes."
     
@@ -134,7 +134,7 @@ function cleanup {
 
 
 # check if ppss is already running.
-function is_running {
+is_running () {
 
     if [ -e "$RUNNING_SIGNAL" ]
     then
@@ -218,7 +218,7 @@ do
     esac
 done
 
-function init_vars {
+init_vars () {
 
     echo 0 > "$ARRAY_POINTER_FILE"
 
@@ -244,7 +244,7 @@ function init_vars {
     fi
 }
 
-function expand_str {
+expand_str () {
 
     STR=$1
     LENGTH=$TYPE_LENGTH
@@ -258,7 +258,7 @@ function expand_str {
     echo "$STR"
 }
 
-function log {
+log () {
 
     TYPE="$1"
     MESG="$2"
@@ -281,7 +281,7 @@ function log {
 
 }
 
-function check_status {
+check_status () {
 
     ERROR="$1"
     FUNCTION="$2"
@@ -295,7 +295,7 @@ function check_status {
 
 }
 
-function get_no_of_cpus {
+get_no_of_cpus () {
 
     # Use hyperthreading or not?
     HPT=$1
@@ -306,7 +306,7 @@ function get_no_of_cpus {
         HPT=no
     fi
 
-    function got_cpu_info {
+    got_cpu_info () {
 
     ERROR="$1"
     check_status "$ERROR" "$FUNCNAME" "cannot determine number of cpu cores. Please specify a number of parallell processes manually with -p." 
@@ -363,7 +363,7 @@ function get_no_of_cpus {
 }
 
 
-function random_delay {
+random_delay () {
 
     ARGS="$1"
 
@@ -378,7 +378,7 @@ function random_delay {
     sleep "$NUMBER"
 }
 
-function global_lock {
+global_lock () {
 
     mkdir $GLOBAL_LOCK > /dev/null 2>&1
     ERROR=$?
@@ -390,7 +390,7 @@ function global_lock {
     fi
 }
 
-function get_global_lock {
+get_global_lock () {
 
     while true
     do
@@ -406,7 +406,7 @@ function get_global_lock {
     done
 }
 
-function release_global_lock {
+release_global_lock () {
 
     if [ -e "$GLOBAL_LOCK" ]
     then
@@ -420,7 +420,7 @@ function release_global_lock {
 }
 
 
-function are_jobs_running {
+are_jobs_running () {
    
     NUMBER_OF_PROCS=`jobs | wc -l`
     if [ "$NUMBER_OF_PROCS" -gt "1" ]
@@ -431,7 +431,7 @@ function are_jobs_running {
     fi
 }
 
-function get_all_items {
+get_all_items () {
 
     count=0
 
@@ -466,7 +466,7 @@ function get_all_items {
     fi
 }
 
-function get_item {
+get_item () {
 
     get_global_lock
 
@@ -513,7 +513,7 @@ function get_item {
 
 }
 
-function start_single_worker {
+start_single_worker () {
     
     get_item
     ERROR=$?
@@ -529,7 +529,7 @@ function start_single_worker {
     fi
 }
 
-function commando {
+commando () {
 
     ITEM="$1"
 
@@ -546,7 +546,7 @@ function commando {
     return $?
 }
 
-function listen_for_job {
+listen_for_job () {
 
     log INFO "Listener started."
     while read event <& 42
@@ -555,8 +555,8 @@ function listen_for_job {
     done
 }
 
-# This function starts an number of parallel workers based on the # of parallel jobs allowed.
-function start_all_workers {
+# This starts an number of parallel workers based on the # of parallel jobs allowed.
+start_all_workers () {
 
     log INFO "Starting $MAX_NO_OF_RUNNING_JOBS workers."
 
@@ -570,8 +570,8 @@ function start_all_workers {
 }
 
 
-# If this function is called, the whole framework will execute.
-function main {
+# If this is called, the whole framework will execute.
+main () {
     
     log DEBUG "---------------- START ---------------------"
     log INFO "$SCRIPT_NAME version $SCRIPT_VERSION"
@@ -583,7 +583,7 @@ function main {
     start_all_workers
 
 }
-# This command starts the function that sets the whole framework in motion.
+# This command starts the that sets the whole framework in motion.
 main
 while true
 do
