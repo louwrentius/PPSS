@@ -39,13 +39,14 @@ trap 'kill_process; ' INT
 
 # Setting some vars. Do not change. 
 SCRIPT_NAME="Parallel Processing Shell Script"
-SCRIPT_VERSION="1.04"
+SCRIPT_VERSION="1.05"
 
 RUNNING_SIGNAL="$0_is_running"
 GLOBAL_LOCK="PPSS-$RANDOM-$RANDOM"
 PAUSE_SIGNAL="pause.txt"
 ARRAY_POINTER_FILE="array-pointer-$RANDOM-$RANDOM"
 JOB_LOG_DIR="job_log"
+LOGFILE="ppss-log.txt"
 MAX_DELAY=2
 PERCENT="0"
 PID="$$"
@@ -145,6 +146,7 @@ is_running () {
     fi
 }
 
+# If no arguments are specified, show usage.
 if [ $# -eq 0 ]
 then
   showusage
@@ -217,6 +219,12 @@ do
             exit 1;;
     esac
 done
+
+# Init log file
+if [ -e "$LOGFILE" ]
+then
+    rm $LOGFILE
+fi
 
 init_vars () {
 
