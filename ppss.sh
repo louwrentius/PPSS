@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #*
 #* PPSS, the Parallel Processing Shell Script
 #* 
