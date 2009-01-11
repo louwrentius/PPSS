@@ -39,7 +39,7 @@ trap 'kill_process; ' INT
 
 # Setting some vars. Do not change. 
 SCRIPT_NAME="Parallel Processing Shell Script"
-SCRIPT_VERSION="1.05"
+SCRIPT_VERSION="1.06"
 
 RUNNING_SIGNAL="$0_is_running"
 GLOBAL_LOCK="PPSS-$RANDOM-$RANDOM"
@@ -68,7 +68,7 @@ showusage () {
     echo "Options are:"
     echo 
     echo -e "\t- c [ command ] \t\t\tCommand to execute. Can be a custom script or just a plain command."
-    echo -e "\t- d [ directory] \t\t\tDirectory containing items to be processed."
+    echo -e "\t- d [ directory ] \t\t\tDirectory containing items to be processed."
     echo -e "\t- f [ input file ] \t\t\tFile containing items to be processed. Either -d or -f" 
     echo -e "\t- l [ logfile ] \t\t\tSpecifies name and location of the logfile."
     echo -e "\t- p [ no of parallel processes ] \tOptional: specifies number of simultaneous processes manually."
@@ -76,7 +76,7 @@ showusage () {
     echo
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
-    echo -e "$0 -c 'lame' -d /path/to/wavfiles -l logfile -j "
+    echo -e "$0 -c 'lame /path/to/wavfiles/' -d /path/to/wavfiles -l logfile -j"
     
 }
 
