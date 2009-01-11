@@ -546,7 +546,7 @@ commando () {
         log DEBUG "Skipping item $ITEM - already processed." # <-- disabled because of possible performance penalty.
     else
         #log DEBUG "Starting command on item $ITEM."  # <-- disabled because of possible performance penalty.
-        EXECME='$COMMAND"$ITEM" > "$JOB_LOG_DIR/$ITEM"'
+        EXECME='$COMMAND"$ITEM" > "$JOB_LOG_DIR/$ITEM" 2>&1'
         eval "$EXECME"
     fi
 
