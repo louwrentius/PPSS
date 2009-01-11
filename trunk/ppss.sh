@@ -248,7 +248,10 @@ init_vars () {
 
     if [ ! -e "$JOB_LOG_DIR" ]
     then
+        log INFO "Job log directory $JOB_lOG_DIR does not exist. Creating."
         mkdir "$JOB_LOG_DIR"
+    else
+        log INFO "Job log directory $JOB_LOG_DIR exists, if it contains logs for items, these items will be skiped."
     fi
 }
 
