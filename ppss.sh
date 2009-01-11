@@ -328,7 +328,7 @@ get_no_of_cpus () {
     then
         if [ `uname` == "Linux" ]
         then
-            NUMBER=`cat /proc/cpuinfoo | grep processor | wc -l`
+            NUMBER=`cat /proc/cpuinfo | grep processor | wc -l`
             got_cpu_info "$?"
             
         elif [ `uname` == "Darwin" ]
