@@ -39,7 +39,7 @@ trap 'kill_process; ' INT
 
 # Setting some vars. Do not change. 
 SCRIPT_NAME="Parallel Processing Shell Script"
-SCRIPT_VERSION="1.06"
+SCRIPT_VERSION="1.08"
 
 RUNNING_SIGNAL="$0_is_running"
 GLOBAL_LOCK="PPSS-$RANDOM-$RANDOM"
@@ -544,12 +544,15 @@ commando () {
 
     ITEM="$1"
 
-    if [ -e "$JOB_LOG_DIR/$ITEM" ]
+    LOG_FILE_NAME=`echo $ITEM | sed s/^\\.//g | sed s/^\\.\\.//g | sed s/\\\///g`
+    ITEM_LOG_FILE="$JOB_LOG_DIR/$LOG_FILE_NAME"
+
+    if [ -e "$ITEM_LOG_FILE" ]
     then
-        log DEBUG "Skipping item $ITEM - already processed." # <-- disabled because of possible performance penalty.
+        log DEBUG "Skipping item $ITEM - already processed." 
     else
-        #log DEBUG "Starting command on item $ITEM."  # <-- disabled because of possible performance penalty.
-        EXECME='$COMMAND"$ITEM" > "$JOB_LOG_DIR/$ITEM" 2>&1'
+        
+        EXECME='$COMMAND"$ITEM" > "$ITEM_LOG_FILE" 2>&1'
         eval "$EXECME"
     fi
 
