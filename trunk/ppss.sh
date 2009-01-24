@@ -39,7 +39,7 @@ trap 'kill_process; ' INT
 
 # Setting some vars. Do not change. 
 SCRIPT_NAME="Parallel Processing Shell Script"
-SCRIPT_VERSION="1.08"
+SCRIPT_VERSION="1.10"
 
 RUNNING_SIGNAL="$0_is_running"
 GLOBAL_LOCK="PPSS-$RANDOM-$RANDOM"
@@ -55,6 +55,8 @@ IFS_BACKUP="$IFS"
 
 SSH_SERVER=""                          # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
+SSH_OPTS="-o \"BatchMode yes\" \"ControlPath /tmp/master-%r@%h:%p\" -o \"ControlMaster auto\""
+SSH_MASTER_PID=""
 
 showusage () {
     
@@ -112,6 +114,12 @@ kill_process () {
             exit 0
         fi
     done
+    
+    # The master SSH connection should be killed.
+    if [ ! -z "$SSH_MASTER_PID" ]
+    then
+        kill -9 "$SSH_MASTER_PID"
+    fi
 }
 
 
@@ -238,10 +246,17 @@ exec_cmd () {
 
     if [ ! -z "$SSH_SERVER" ]
     then
-        ssh "$SSH_KEY" "$SSH_SERVER" "$CMD"
+        ssh "$SSH_OPTS" "$SSH_KEY" "$SSH_SERVER" "$CMD"
     else
-        `"$CMD"`
+        "$CMD"
     fi
+}
+
+# this function makes remote or local checking of existence of items transparent.
+does_file_exist () {
+
+    FILE="$1"
+    exec_cmd "if [ -e \"$FILE\" ]; then return 0; else return 1; fi"
 }
 
 
@@ -344,11 +359,15 @@ check_status () {
 
 test_server () {
 
+    # Testing if the remote server works as expected.
     if [ ! -z "$SSH_SERVER" ] 
     then
 
-        ssh "$SSH_KEY" "$SSH_SERVER" date >> /dev/null 2>&1
+        ssh -N -M "$SSH_OPTS" "$SSH_KEY" "$SSH_SERVER" &
+        SSH_MASTER_PID="$!"
         check_status "$?" "$FUNCNAME" "Server $SSH_SERVER could not be reached."
+        exec_cmd "read" &
+        
     else
         log DEBUG "No remote server specified, assuming stand-alone mode."
     fi
@@ -557,7 +576,6 @@ get_item () {
     log INFO "Currently $PERCENT percent complete. Processed $ARRAY_POINTER of $SIZE_OF_ARRAY items." 
     echo -en "\033[1A"
 
- 
     # Check if all items have been processed.
     if [ "$ARRAY_POINTER" -ge "$SIZE_OF_ARRAY" ]
     then
@@ -579,7 +597,6 @@ get_item () {
         release_global_lock
         return 0
     fi
-
 }
 
 start_single_worker () {
@@ -610,7 +627,8 @@ commando () {
     LOG_FILE_NAME=`echo $ITEM | sed s/^\\.//g | sed s/^\\.\\.//g | sed s/\\\///g`
     ITEM_LOG_FILE="$JOB_LOG_DIR/$LOG_FILE_NAME"
 
-    if [ -e "$ITEM_LOG_FILE" ]
+    does_file_exist "$ITEM_LOG_FILE"
+    if [ "$0" == "0" ]
     then
         log DEBUG "Skipping item $ITEM - already processed." 
     else
@@ -619,9 +637,12 @@ commando () {
         eval "$EXECME"
     fi
 
-    get_global_lock
-    scp "$SSH_KEY" "$ITEM_LOG_FILE" "$SSH_SERVER:~/$JOB_LOG"
-    release_global_lock
+    if [ ! -z "$SSH_SERVER" ]
+    then
+        get_global_lock
+        scp "$SSH_KEY" "$ITEM_LOG_FILE" "$SSH_SERVER:~/$JOB_LOG"
+        release_global_lock
+    fi
 
     start_single_worker
     return $?
@@ -663,7 +684,6 @@ main () {
     listen_for_job "$MAX_NO_OF_RUNNING_JOBS" &
     LISTENER_PID=$!
     start_all_workers
-
 }
 # This command starts the that sets the whole framework in motion.
 main
