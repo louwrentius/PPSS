@@ -246,9 +246,9 @@ exec_cmd () {
 
     if [ ! -z "$SSH_SERVER" ]
     then
-        ssh "$SSH_OPTS" "$SSH_KEY" "$SSH_SERVER" "$CMD"
+        ssh "$SSH_OPTS" "$SSH_KEY" "$SSH_SERVER" eval "$CMD"
     else
-        "$CMD"
+        eval "$CMD"
     fi
 }
 
@@ -490,7 +490,7 @@ release_global_lock () {
 
     if [ ! -z "$SSH_SERVER" ]
     then
-        ssh "$SSH_KEY" "$SSH_SERVER" rm -rf "$GLOBAL_LOCK"
+        exec_cmd "rm -rf $GLOBAL_LOCK"
     else
         rm -rf "$GLOBAL_LOCK"
     fi
@@ -513,9 +513,9 @@ get_all_items () {
 
     if [ -z "$INPUT_FILE" ]
     then
-        if [ ! -z "SSH_SERVER" ] # Are we running stand-alone or as a slave?"
+        if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
         then
-            ITEMS=`ssh "$SSH_KEY" "$SSH_SERVER" ls -1 $SRC_DIR`
+            ITEMS=`exec_cmd ls -1 $SRC_DIR`
             check_status "$FUNCNAME" "Could not list files within remote source directory."
         else 
             ITEMS=`ls -1 $SRC_DIR`
@@ -529,7 +529,7 @@ get_all_items () {
         done
         IFS=$IFS_BACKUP
     else
-        if [ ! -z "SSH_SERVER" ] # Are we running stand-alone or as a slave?"
+        if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
         then
             scp "$SSH_KEY" "$SSH_SERVER:~/$INPUT_FILE" >> /dev/null 2>&!
             check_status "$FUNCNAME" "Could not copy input file."
