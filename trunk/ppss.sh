@@ -76,8 +76,8 @@ showusage () {
     echo
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
-    echo -e "$0 -c 'lame /path/to/wavfiles/' -d /path/to/wavfiles -l logfile -j"
-    
+    echo -e "$0 -c 'lame ' -d /path/to/wavfiles -l logfile -j (wach out for the space in -c)" 
+    echo    
 }
 
 kill_process () {
@@ -171,6 +171,7 @@ do
             if [ ! -e "$INPUT_FILE" ]
             then
                 echo "ERROR: input file $INPUT_FILE not found."
+                cleanup
                 exit 1
             fi
             ;;
@@ -179,6 +180,7 @@ do
             if [ ! -e "$SRC_DIR" ]
             then
                 echo "ERROR: directory $SRC_DIR does not exist."
+                cleanup
                 exit 1
             fi
             ;; 
@@ -187,6 +189,7 @@ do
             if [ -z "$COMMAND" ]
             then
                 echo "ERROR: command not specified."
+                cleanup
                 exit 1
             fi
             ;;
@@ -221,12 +224,23 @@ do
 done
 
 # Init log file
-if [ -e "$LOGFILE" ]
-then
-    rm $LOGFILE
-fi
 
 init_vars () {
+
+    if [ -e "$LOGFILE" ]
+    then
+        rm $LOGFILE
+    fi
+
+    if [ -z "$COMMAND" ]
+    then
+        echo
+        echo "ERROR - no command specified."
+        echo
+        showusage
+        cleanup
+        exit 1
+    fi
 
     echo 0 > "$ARRAY_POINTER_FILE"
 
@@ -472,7 +486,8 @@ get_all_items () {
     SIZE_OF_ARRAY="${#ARRAY[@]}"
     if [ "$SIZE_OF_ARRAY" -le "0" ]
     then
-        echo "ERROR: source file seems to be empty."
+        echo "ERROR: source file/dir seems to be empty."
+        cleanup
         exit 1
     fi
 }
@@ -544,6 +559,11 @@ commando () {
 
     ITEM="$1"
 
+    if [ -z "$INPUT_FILE" ]
+    then
+        ITEM="$SRC_DIR/$ITEM"
+    fi
+
     LOG_FILE_NAME=`echo $ITEM | sed s/^\\.//g | sed s/^\\.\\.//g | sed s/\\\///g`
     ITEM_LOG_FILE="$JOB_LOG_DIR/$LOG_FILE_NAME"
 
@@ -587,10 +607,10 @@ start_all_workers () {
 # If this is called, the whole framework will execute.
 main () {
     
-    log DEBUG "---------------- START ---------------------"
-    log INFO "$SCRIPT_NAME version $SCRIPT_VERSION"
     is_running    
     init_vars
+    log DEBUG "---------------- START ---------------------"
+    log INFO "$SCRIPT_NAME version $SCRIPT_VERSION"
     get_all_items
     listen_for_job "$MAX_NO_OF_RUNNING_JOBS" &
     LISTENER_PID=$!
