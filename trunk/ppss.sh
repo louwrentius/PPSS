@@ -72,17 +72,17 @@ showusage () {
     echo 
     echo "Options are:"
     echo 
-    echo -e "\t- c [ command ] \t\t\tCommand to execute. Can be a custom script or just a plain command."
-    echo -e "\t- d [ directory ] \t\t\tDirectory containing items to be processed."
-    echo -e "\t- f [ input file ] \t\t\tFile containing items to be processed. Either -d or -f" 
-    echo -e "\t- l [ logfile ] \t\t\tSpecifies name and location of the logfile."
-    echo -e "\t- p [ no of parallel processes ] \tOptional: specifies number of simultaneous processes manually."
-    echo -e "\t- j ( enable hyperthreading ) \t\tOptiona: Enable or disable hyperthreading. Enabled by default."
+    echo -e "\t- c \tCommand to execute. Can be a custom script or just a plain command."
+    echo -e "\t- d \tDirectory containing items to be processed."
+    echo -e "\t- f \tFile containing items to be processed. Either -d or -f" 
+    echo -e "\t- l \tSpecifies name and location of the logfile."
+    echo -e "\t- p \tOptional: specifies number of simultaneous processes manually."
+    echo -e "\t- j \tOptiona: Enable or disable hyperthreading. Enabled by default."
     echo
     echo "Options for distributed usage:"
     echo 
-    echo -e "\t- s [ username@server ] \t\tUsername and server domain name or IP-address of 'PPSS server'."
-    echo -e "\t- k [ SSH key file ] \t\tSSH key file used for connection with 'PPSS server'."
+    echo -e "\t- s \tUsername@server domain name or IP-address of 'PPSS master server'."
+    echo -e "\t- k \tSSH key file used for connection with 'PPSS server'."
     echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
