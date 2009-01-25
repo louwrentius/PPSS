@@ -55,7 +55,7 @@ IFS_BACKUP="$IFS"
 
 SSH_SERVER=""                          # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
-SSH_OPTS="-o \"BatchMode yes\" \"ControlPath /tmp/master-%r@%h:%p\" -o \"ControlMaster auto\""
+SSH_OPTS="-o \\"BatchMode=yes\\" -o \\"ControlPath /tmp/master-%r@%h:%p\\" -o \\"ControlMaster auto\\""
 SSH_MASTER_PID=""
 
 showusage () {
@@ -362,12 +362,11 @@ test_server () {
     # Testing if the remote server works as expected.
     if [ ! -z "$SSH_SERVER" ] 
     then
+        exec_cmd "date"
+        check_status "$?" "$FUNCNAME" "Server $SSH_SERVER could not be reached"
 
         ssh -N -M "$SSH_OPTS" "$SSH_KEY" "$SSH_SERVER" &
         SSH_MASTER_PID="$!"
-        check_status "$?" "$FUNCNAME" "Server $SSH_SERVER could not be reached."
-        exec_cmd "read" &
-        
     else
         log DEBUG "No remote server specified, assuming stand-alone mode."
     fi
