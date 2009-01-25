@@ -52,6 +52,7 @@ PERCENT="0"
 PID="$$"
 LISTENER_PID=""
 IFS_BACKUP="$IFS"
+INTERVAL="15"
 
 SSH_SERVER=""                          # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -59,7 +60,7 @@ SSH_SOCKET="/tmp/PPSS-ssh-socket"
 SSH_OPTS="-o BatchMode=yes -o ControlPath=$SSH_SOCKET -o ControlMaster=auto -o ConnectTimeout=5"
 SSH_MASTER_PID=""
 ITEM_LOCK_DIR="PPSS_ITEM_LOCK_DIR"
-TMP_PROCESSING="PPSS_processing"
+PPSS_LOCAL_WORKDIR="PPSS_LOCAL_WORKDIR"
 TRANSFER_TO_SLAVE="0"
 SECURE_COPY="1"
 REMOTE_OUTPUT_DIR=""
@@ -88,7 +89,7 @@ showusage () {
     echo "Options for distributed usage:"
     echo 
     echo -e "\t- s \tUsername@server domain name or IP-address of 'PPSS master server'."
-    echo -e "\t- k \tSSH key file used for connection with 'PPSS server'."
+    echo -e "\t- k \tSSH key file used for connection with 'PPSS master server'."
     echo -e "\t- t \tTransfer remote item to slave for local processing."
     echo -e "\t- o \tUpload output back to server into this directory."
     echo 
@@ -340,9 +341,9 @@ init_vars () {
         exit
     fi
 
-    if [ ! -e "$TMP_PROCESSING" ]
+    if [ ! -e "$PPSS_LOCAL_WORKDIR" ] && [ ! -z "$SSH_SERVER" ]
     then
-        mkdir "$TMP_PROCESSING"
+        mkdir "$PPSS_LOCAL_WORKDIR"
     fi
 }
 
@@ -542,21 +543,55 @@ are_jobs_running () {
     fi
 }
 
-transfer_item () {
+download_item () {
 
     ITEM="$1"
     ITEM_WITH_PATH="$SRC_DIR/$ITEM"
 
-    echo "$ITEM_WITH_PATH"
-
     if [ "$TRANSFER_TO_SLAVE" == "1" ]
     then
+        log DEBUG "Transfering item $ITEM to local disk."
         if [ "$SECURE_COPY" == "1" ]
         then
-            scp -q $SSH_OPTS $SSH_KEY $SSH_SERVER:$ITEM_WITH_PATH $TMP_PROCESSING
+            scp -q $SSH_OPTS $SSH_KEY $SSH_SERVER:$ITEM_WITH_PATH $PPSS_LOCAL_WORKDIR
         else
-            cp $ITEM_WITH_PATH $TMP_PROCESSING 
+            cp $ITEM_WITH_PATH $PPSS_LOCAL_WORKDIR 
         fi
+    fi
+}
+
+upload_item () {
+
+    ITEM="$1"
+
+    echo "$ITEM" | grep -i ".error" >> /dev/null 2>&1
+    if [ "$?" == "0" ]
+    then
+        log DEBUG "NOT uploading files with errors ($ITEM)."
+        return 1
+    fi
+
+    if [ -e "$PPSS_LOCAL_WORKDIR/$ITEM" ]
+    then
+        log DEBUG "Uploading item $ITEM."
+        if [ "$SECURE_COPY" == "1" ]
+        then
+            scp -q $SSH_OPTS $SSH_KEY $PPSS_LOCAL_WORKDIR/"$ITEM" $SSH_SERVER:$REMOTE_OUTPUT_DIR
+            ERROR="$?"
+            if [ ! "$ERROR" == "0" ]
+            then
+                log DEBUG "ERROR - uploading of $ITEM failed."
+            fi
+        else    
+            cp "$PPSS_LOCAL_WORKDIR/$ITEM" $REMOTE_OUTPUT_DIR
+            ERROR="$?"
+            if [ ! "$ERROR" == "0" ]
+            then
+                log DEBUG "ERROR - uploading of $ITEM failed."
+            fi
+        fi
+    else    
+        log DEBUG "ERROR: item $ITEM does not exist."
     fi
 }
 
@@ -590,7 +625,6 @@ get_all_items () {
 
     if [ -z "$INPUT_FILE" ]
     then
-        echo "SSH SERVER IS $SSH_SERVER" 
         if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
         then
             ITEMS=`exec_cmd "ls -1 $SRC_DIR"`
@@ -675,11 +709,12 @@ get_item () {
         lock_item "$ITEM"
         if [ ! "$?" == "0" ]
         then
+            log DEBUG "Item $ITEM is locked."
             release_global_lock
             get_item
         else
             release_global_lock
-            transfer_item "$ITEM"
+            download_item "$ITEM"
             return 0
         fi
     fi
@@ -709,7 +744,7 @@ commando () {
     then
         ITEM="$SRC_DIR/$ITEM"
     else
-        ITEM="$TMP_PROCESSING/$ITEM"
+        ITEM="$PPSS_LOCAL_WORKDIR/$ITEM"
     fi
 
     LOG_FILE_NAME=`echo $ITEM | sed s/^\\\.//g | sed s/^\\\.\\\.//g | sed s/\\\///g`
@@ -727,10 +762,10 @@ commando () {
 
         if [ ! "$ERROR" == "0" ] && [ "$TRANSFER_TO_SLAVE" == "1" ]
         then
-            mv $ITEM $ITEM.error
+           mv $ITEM $ITEM.error
         elif [ "$TRANSFER_TO_SLAVE" == "1" ]      
         then
-            rm $ITEM
+           rm $ITEM
         fi
 
         #release_item "$ITEM"
@@ -790,11 +825,19 @@ do
     JOBS=`ps ax | grep -v grep | grep ppss.sh | wc -l`
     if [ "$JOBS" -gt "3" ]
     then
-        sleep 20
+        sleep $INTERVAL
     else
         echo -en "\033[1B"
         log INFO "There are no more running jobs, so we must be finished."
         echo -en "\033[1B"
+        if [ ! -z "$REMOTE_OUTPUT_DIR" ]
+        then
+            log INFO "Transfering all processed items back to server."
+            for x in `ls -1 $PPSS_LOCAL_WORKDIR`
+            do
+                upload_item "$x"
+            done
+        fi
         log INFO "Killing listener and remainig processes."
         log INFO "Dying processes may display an error message."
         kill_process
