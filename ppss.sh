@@ -55,9 +55,14 @@ IFS_BACKUP="$IFS"
 
 SSH_SERVER=""                          # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
-SSH_OPTS="-o BatchMode=yes -o ControlPath=/tmp/master-%r@%h:%p -o ControlMaster=auto -o ConnectTimeout=5"
+SSH_SOCKET="/tmp/PPSS-ssh-socket"
+SSH_OPTS="-o BatchMode=yes -o ControlPath=$SSH_SOCKET -o ControlMaster=auto -o ConnectTimeout=5"
 SSH_MASTER_PID=""
 ITEM_LOCK_DIR="PPSS_ITEM_LOCK_DIR"
+TMP_PROCESSING="PPSS_processing"
+TRANSFER_TO_SLAVE="0"
+SECURE_COPY="1"
+REMOTE_OUTPUT_DIR=""
 
 showusage () {
     
@@ -78,12 +83,14 @@ showusage () {
     echo -e "\t- f \tFile containing items to be processed. Either -d or -f" 
     echo -e "\t- l \tSpecifies name and location of the logfile."
     echo -e "\t- p \tOptional: specifies number of simultaneous processes manually."
-    echo -e "\t- j \tOptiona: Enable or disable hyperthreading. Enabled by default."
+    echo -e "\t- j \tOptional: Enable or disable hyperthreading. Enabled by default."
     echo
     echo "Options for distributed usage:"
     echo 
     echo -e "\t- s \tUsername@server domain name or IP-address of 'PPSS master server'."
     echo -e "\t- k \tSSH key file used for connection with 'PPSS server'."
+    echo -e "\t- t \tTransfer remote item to slave for local processing."
+    echo -e "\t- o \tUpload output back to server into this directory."
     echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
@@ -123,6 +130,31 @@ kill_process () {
     
 }
 
+exec_cmd () { 
+
+    CMD="$1"
+
+    if [ ! -z "$SSH_SERVER" ]
+    then
+        ssh $SSH_OPTS $SSH_KEY $SSH_SERVER $CMD
+    else
+        eval "$CMD"
+    fi
+}
+
+# this function makes remote or local checking of existence of items transparent.
+does_file_exist () {
+
+    FILE="$1"
+    `exec_cmd "ls -1 $FILE >> /dev/null 2>&1"`
+    if [ "$?" == "0" ]
+    then
+        return 0
+    else 
+        return 1
+    fi
+}
+
 
 cleanup () {
 
@@ -147,6 +179,12 @@ cleanup () {
     then
         rm "$RUNNING_SIGNAL"
     fi
+
+    if [ -e "$SSH_SOCKET" ]
+    then
+        rm -rf "$SSH_SOCKET"
+    fi
+
 }
 
 
@@ -180,26 +218,14 @@ then
 fi
 
 # Process any command-line options that are specified."
-while getopts ":c:d:f:i:jhk:l:p:s:v" OPTIONS
+while getopts ":c:d:f:i:jhk:l:o:p:s:tv" OPTIONS
 do
     case $OPTIONS in
         f )
             INPUT_FILE="$OPTARG"
-            if [ ! -e "$INPUT_FILE" ]
-            then
-                echo "ERROR: input file $INPUT_FILE not found."
-                cleanup
-                exit 1
-            fi
             ;;
         d ) 
             SRC_DIR="$OPTARG"
-            if [ ! -e "$SRC_DIR" ]
-            then
-                echo "ERROR: directory $SRC_DIR does not exist."
-                cleanup
-                exit 1
-            fi
             ;; 
         c ) 
             COMMAND="$OPTARG"
@@ -217,6 +243,10 @@ do
         k )
             SSH_KEY="-i $OPTARG"
             ;;
+        o )
+            REMOTE_OUTPUT_DIR="$OPTARG"
+            ;;
+            
         p )
             TMP="$OPTARG"
             if [ ! -z "$TMP" ]
@@ -226,6 +256,9 @@ do
             ;;
         s ) 
             SSH_SERVER="$OPTARG"
+            ;;
+        t )
+            TRANSFER_TO_SLAVE="1"    
             ;;
 
         v )
@@ -241,30 +274,6 @@ do
 done
 
 # This function makes local and remote operation transparent.
-exec_cmd () { 
-
-    CMD="$1"
-
-    if [ ! -z "$SSH_SERVER" ]
-    then
-        ssh $SSH_OPTS $SSH_KEY $SSH_SERVER $CMD
-    else
-        eval "$CMD"
-    fi
-}
-
-# this function makes remote or local checking of existence of items transparent.
-does_file_exist () {
-
-    FILE="$1"
-    `exec_cmd "ls -1 $FILE >> /dev/null 2>&1"`
-    if [ "$?" == "0" ]
-    then
-        return 0
-    else 
-        return 1
-    fi
-}
 
 
 # Init all vars
@@ -308,9 +317,32 @@ init_vars () {
     then
         log INFO "Job log directory $JOB_lOG_DIR does not exist. Creating."
         exec_cmd "mkdir $JOB_LOG_DIR"
-        mkdir "$JOB_LOG_DIR" >> /dev/null 2>&1
     else
         log INFO "Job log directory $JOB_LOG_DIR exists, if it contains logs for items, these items will be skipped."
+    fi
+
+    does_file_exist "$ITEM_LOCK_DIR"
+    if [ ! "$?" == "0" ]
+    then
+        log DEBUG "Creating remote item lock dir."
+        exec_cmd "mkdir $ITEM_LOCK_DIR"
+    fi
+
+    if [ ! -e "$JOB_LOG_DIR" ]
+    then
+        mkdir "$JOB_LOG_DIR"
+    fi
+
+    does_file_exist "$REMOTE_OUTPUT_DIR"
+    if [ ! "$?" == "0" ]
+    then
+        echo "ERROR: remote output dir $REMOTE_OUTPUT_DIR does not exist."
+        exit
+    fi
+
+    if [ ! -e "$TMP_PROCESSING" ]
+    then
+        mkdir "$TMP_PROCESSING"
     fi
 }
 
@@ -510,6 +542,24 @@ are_jobs_running () {
     fi
 }
 
+transfer_item () {
+
+    ITEM="$1"
+    ITEM_WITH_PATH="$SRC_DIR/$ITEM"
+
+    echo "$ITEM_WITH_PATH"
+
+    if [ "$TRANSFER_TO_SLAVE" == "1" ]
+    then
+        if [ "$SECURE_COPY" == "1" ]
+        then
+            scp -q $SSH_OPTS $SSH_KEY $SSH_SERVER:$ITEM_WITH_PATH $TMP_PROCESSING
+        else
+            cp $ITEM_WITH_PATH $TMP_PROCESSING 
+        fi
+    fi
+}
+
 lock_item () {
 
     ITEM="$1"
@@ -535,8 +585,12 @@ get_all_items () {
 
     count=0
 
+    #does_file_exist "$SRC_DIR"
+    #check_status "$0" "$FUNCNAME" "ERROR - source dir $SRC_DIR does not exist."
+
     if [ -z "$INPUT_FILE" ]
     then
+        echo "SSH SERVER IS $SSH_SERVER" 
         if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
         then
             ITEMS=`exec_cmd "ls -1 $SRC_DIR"`
@@ -555,10 +609,10 @@ get_all_items () {
     else
         if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
         then
-            scp -q "$SSH_KEY" "$SSH_SERVER:~/$INPUT_FILE" >> /dev/null 2>&!
+            scp -q $SSH_OPTS "$SSH_KEY" "$SSH_SERVER:~/$INPUT_FILE" >> /dev/null 2>&!
             check_status "$?" "$FUNCNAME" "Could not copy input file."
         fi
-
+    
         exec 10<$INPUT_FILE
 
         while read LINE <&10
@@ -622,10 +676,10 @@ get_item () {
         if [ ! "$?" == "0" ]
         then
             release_global_lock
-            log INFO "ITEM $ITEM is locked, get next"
             get_item
         else
             release_global_lock
+            transfer_item "$ITEM"
             return 0
         fi
     fi
@@ -651,9 +705,11 @@ commando () {
 
     ITEM="$1"
 
-    if [ -z "$INPUT_FILE" ]
+    if [ -z "$INPUT_FILE" ] && [ "$TRANSFER_TO_SLAVE" == "0" ]
     then
         ITEM="$SRC_DIR/$ITEM"
+    else
+        ITEM="$TMP_PROCESSING/$ITEM"
     fi
 
     LOG_FILE_NAME=`echo $ITEM | sed s/^\\\.//g | sed s/^\\\.\\\.//g | sed s/\\\///g`
@@ -667,8 +723,17 @@ commando () {
         
         EXECME='$COMMAND"$ITEM" > "$ITEM_LOG_FILE" 2>&1'
         eval "$EXECME"
+        ERROR="$?"
 
-        release_item "$ITEM"
+        if [ ! "$ERROR" == "0" ] && [ "$TRANSFER_TO_SLAVE" == "1" ]
+        then
+            mv $ITEM $ITEM.error
+        elif [ "$TRANSFER_TO_SLAVE" == "1" ]      
+        then
+            rm $ITEM
+        fi
+
+        #release_item "$ITEM"
 
         if [ ! -z "$SSH_SERVER" ]
         then
