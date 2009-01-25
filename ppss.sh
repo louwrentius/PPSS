@@ -41,29 +41,29 @@ trap 'kill_process; ' INT
 SCRIPT_NAME="Parallel Processing Shell Script"
 SCRIPT_VERSION="1.10"
 
-RUNNING_SIGNAL="$0_is_running"
-GLOBAL_LOCK="PPSS-GLOBAL-LOCK"
-PAUSE_SIGNAL="pause.txt"
-ARRAY_POINTER_FILE="ppss-array-pointer"
-JOB_LOG_DIR="JOB_LOG"
-LOGFILE="ppss-log.txt"
+RUNNING_SIGNAL="$0_is_running"          # Prevents running mutiple instances of PPSS.. 
+GLOBAL_LOCK="PPSS-GLOBAL-LOCK"          # Global lock file used by local PPSS instance.
+PAUSE_SIGNAL="pause.txt"                # Not implemented yet (pause processing).
+ARRAY_POINTER_FILE="ppss-array-pointer" # 
+JOB_LOG_DIR="JOB_LOG"                   # Directory containing log files of processed items.
+LOGFILE="ppss-log.txt"                  # General PPSS log file. Contains lots of info.
 MAX_DELAY=2
 PERCENT="0"
 PID="$$"
 LISTENER_PID=""
 IFS_BACKUP="$IFS"
-INTERVAL="15"
+INTERVAL="15"                           # Polling interval to check if there are running jobs.
 
-SSH_SERVER=""                          # Remote server or 'master'.
+SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
-SSH_SOCKET="/tmp/PPSS-ssh-socket"
+SSH_SOCKET="/tmp/PPSS-ssh-socket"       # Multiplex multiple SSH connections over 1 master.
 SSH_OPTS="-o BatchMode=yes -o ControlPath=$SSH_SOCKET -o ControlMaster=auto -o ConnectTimeout=5"
 SSH_MASTER_PID=""
-ITEM_LOCK_DIR="PPSS_ITEM_LOCK_DIR"
-PPSS_LOCAL_WORKDIR="PPSS_LOCAL_WORKDIR"
-TRANSFER_TO_SLAVE="0"
-SECURE_COPY="1"
-REMOTE_OUTPUT_DIR=""
+ITEM_LOCK_DIR="PPSS_ITEM_LOCK_DIR"      # Remote directory on master used for item locking.
+PPSS_LOCAL_WORKDIR="PPSS_LOCAL_WORKDIR" # Local directory on slave for local processing.
+TRANSFER_TO_SLAVE="0"                   # Transfer item to slave via (s)cp.
+SECURE_COPY="1"                         # If set, use SCP, Otherwise, use cp.
+REMOTE_OUTPUT_DIR=""                    # Remote directory to which output must be uploaded.
 
 showusage () {
     
@@ -73,7 +73,8 @@ showusage () {
     echo 
     echo "Description: this script processess files or other items in parallel. It is designed to make"
     echo "use of the multi-core CPUs. It will detect the number of available CPUs and start a thread "
-    echo "for each CPU core. It will also use hyperthreading if available."
+    echo "for each CPU core. It will also use hyperthreading if available." It has also support for
+    echo "distributed usage, using a Master server in conjunction with (multiple) slaves."
     echo 
     echo "Usage: $0 [ options ]"
     echo 
@@ -81,10 +82,10 @@ showusage () {
     echo 
     echo -e "\t- c \tCommand to execute. Can be a custom script or just a plain command."
     echo -e "\t- d \tDirectory containing items to be processed."
-    echo -e "\t- f \tFile containing items to be processed. Either -d or -f" 
+    echo -e "\t- f \tFile containing items to be processed. (Alternative to -d)" 
     echo -e "\t- l \tSpecifies name and location of the logfile."
-    echo -e "\t- p \tOptional: specifies number of simultaneous processes manually."
-    echo -e "\t- j \tOptional: Enable or disable hyperthreading. Enabled by default."
+    echo -e "\t- p \tSpecifies number of simultaneous processes manually. (optional)"
+    echo -e "\t- j \tEnable or disable hyperthreading. Enabled by default. (optional)"
     echo
     echo "Options for distributed usage:"
     echo 
@@ -92,6 +93,7 @@ showusage () {
     echo -e "\t- k \tSSH key file used for connection with 'PPSS master server'."
     echo -e "\t- t \tTransfer remote item to slave for local processing."
     echo -e "\t- o \tUpload output back to server into this directory."
+    echo -e "\t- n \tDo *not* use scp for item transfer but use cp. "
     echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
@@ -219,7 +221,7 @@ then
 fi
 
 # Process any command-line options that are specified."
-while getopts ":c:d:f:i:jhk:l:o:p:s:tv" OPTIONS
+while getopts ":c:d:f:i:jhk:l:no:p:s:tv" OPTIONS
 do
     case $OPTIONS in
         f )
@@ -243,6 +245,9 @@ do
             ;;
         k )
             SSH_KEY="-i $OPTARG"
+            ;;
+        n )
+            SECURE_COPY=0
             ;;
         o )
             REMOTE_OUTPUT_DIR="$OPTARG"
