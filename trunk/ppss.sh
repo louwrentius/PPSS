@@ -246,7 +246,8 @@ exec_cmd () {
 
     if [ ! -z "$SSH_SERVER" ]
     then
-        ssh "$SSH_OPTS" "$SSH_KEY" "$SSH_SERVER" eval "$CMD"
+        #ssh "$SSH_OPTS" "$SSH_KEY" "$SSH_SERVER" eval "$CMD"
+        ssh "$SSH_SERVER" "$CMD"
     else
         eval "$CMD"
     fi
