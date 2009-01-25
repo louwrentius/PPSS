@@ -42,9 +42,9 @@ SCRIPT_NAME="Parallel Processing Shell Script"
 SCRIPT_VERSION="1.10"
 
 RUNNING_SIGNAL="$0_is_running"
-GLOBAL_LOCK="PPSS-$RANDOM-$RANDOM"
+GLOBAL_LOCK="PPSS-GLOBAL-LOCK"
 PAUSE_SIGNAL="pause.txt"
-ARRAY_POINTER_FILE="array-pointer-$RANDOM-$RANDOM"
+ARRAY_POINTER_FILE="ppss-array-pointer"
 JOB_LOG_DIR="JOB_LOG"
 LOGFILE="ppss-log.txt"
 MAX_DELAY=2
@@ -55,7 +55,7 @@ IFS_BACKUP="$IFS"
 
 SSH_SERVER=""                          # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
-SSH_OPTS="-o \\"BatchMode=yes\\" -o \\"ControlPath /tmp/master-%r@%h:%p\\" -o \\"ControlMaster auto\\""
+SSH_OPTS="-o BatchMode=yes -o ControlPath=/tmp/master-%r@%h:%p -o ControlMaster=auto -o ConnectTimeout=5"
 SSH_MASTER_PID=""
 
 showusage () {
@@ -109,17 +109,17 @@ kill_process () {
         else
             cleanup 
             echo -en "\033[1B"
+            # The master SSH connection should be killed.
+            if [ ! -z "$SSH_MASTER_PID" ]
+            then
+                kill -9 "$SSH_MASTER_PID"
+            fi
             log INFO "Finished."
             echo ""
             exit 0
         fi
     done
     
-    # The master SSH connection should be killed.
-    if [ ! -z "$SSH_MASTER_PID" ]
-    then
-        kill -9 "$SSH_MASTER_PID"
-    fi
 }
 
 
@@ -132,14 +132,14 @@ cleanup () {
         rm $FIFO 
     fi
 
-    if [ -e "$ARRAY_POINTER_FILE" ] && [ -z "$SSH_SERVER" ]
+    if [ -e "$ARRAY_POINTER_FILE" ] 
     then
         rm $ARRAY_POINTER_FILE
     fi
 
-    if [ -e "$GLOBAL_LOCK" ] && [ -z "$SSH_SERVER" ]
+    if [ -e "$GLOBAL_LOCK" ] 
     then
-        rm -rf "$GLOBAL_LOCK"
+        rm -rf $GLOBAL_LOCK
     fi
 
     if [ -e "$RUNNING_SIGNAL" ]
@@ -242,12 +242,11 @@ done
 # This function makes local and remote operation transparent.
 exec_cmd () { 
 
-    CMD="$1"
+    CMD="eval $1"
 
     if [ ! -z "$SSH_SERVER" ]
     then
-        #ssh "$SSH_OPTS" "$SSH_KEY" "$SSH_SERVER" eval "$CMD"
-        ssh "$SSH_SERVER" "$CMD"
+        ssh $SSH_OPTS $SSH_KEY $SSH_SERVER $CMD
     else
         eval "$CMD"
     fi
@@ -257,7 +256,13 @@ exec_cmd () {
 does_file_exist () {
 
     FILE="$1"
-    exec_cmd "if [ -e \"$FILE\" ]; then return 0; else return 1; fi"
+    `exec_cmd "ls -1 $FILE >> /dev/null 2>&1"`
+    if [ "$?" == "0" ]
+    then
+        return 0
+    else 
+        return 1
+    fi
 }
 
 
@@ -297,12 +302,14 @@ init_vars () {
         MAX_NO_OF_RUNNING_JOBS=`get_no_of_cpus $HYPERTHREADING`
     fi
 
-    if [ ! -e "$JOB_LOG_DIR" ]
+    does_file_exist "$JOB_LOG_DIR"
+    if [ ! "$?" == "0" ]
     then
         log INFO "Job log directory $JOB_lOG_DIR does not exist. Creating."
-        mkdir "$JOB_LOG_DIR"
+        exec_cmd "mkdir $JOB_LOG_DIR"
+        mkdir "$JOB_LOG_DIR" >> /dev/null 2>&1
     else
-        log INFO "Job log directory $JOB_LOG_DIR exists, if it contains logs for items, these items will be skipiped."
+        log INFO "Job log directory $JOB_LOG_DIR exists, if it contains logs for items, these items will be skipped."
     fi
 }
 
@@ -363,10 +370,10 @@ test_server () {
     # Testing if the remote server works as expected.
     if [ ! -z "$SSH_SERVER" ] 
     then
-        exec_cmd "date"
+        exec_cmd "date >> /dev/null"
         check_status "$?" "$FUNCNAME" "Server $SSH_SERVER could not be reached"
 
-        ssh -N -M "$SSH_OPTS" "$SSH_KEY" "$SSH_SERVER" &
+        ssh -N -M $SSH_OPTS $SSH_KEY $SSH_SERVER &
         SSH_MASTER_PID="$!"
     else
         log DEBUG "No remote server specified, assuming stand-alone mode."
@@ -515,8 +522,8 @@ get_all_items () {
     then
         if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
         then
-            ITEMS=`exec_cmd ls -1 $SRC_DIR`
-            check_status "$FUNCNAME" "Could not list files within remote source directory."
+            ITEMS=`exec_cmd "ls -1 $SRC_DIR"`
+            check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
         else 
             ITEMS=`ls -1 $SRC_DIR`
         fi
@@ -531,8 +538,8 @@ get_all_items () {
     else
         if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
         then
-            scp "$SSH_KEY" "$SSH_SERVER:~/$INPUT_FILE" >> /dev/null 2>&!
-            check_status "$FUNCNAME" "Could not copy input file."
+            scp -q "$SSH_KEY" "$SSH_SERVER:~/$INPUT_FILE" >> /dev/null 2>&!
+            check_status "$?" "$FUNCNAME" "Could not copy input file."
         fi
 
         exec 10<$INPUT_FILE
@@ -627,21 +634,21 @@ commando () {
     LOG_FILE_NAME=`echo $ITEM | sed s/^\\.//g | sed s/^\\.\\.//g | sed s/\\\///g`
     ITEM_LOG_FILE="$JOB_LOG_DIR/$LOG_FILE_NAME"
 
-    does_file_exist "$ITEM_LOG_FILE"
-    if [ "$0" == "0" ]
+    does_file_exist "./$ITEM_LOG_FILE"
+    if [ "$?" == "0" ]
     then
         log DEBUG "Skipping item $ITEM - already processed." 
     else
         
-        EXECME='$COMMAND"$ITEM" > "$ITEM_LOG_FILE" 2>&1'
+        EXECME='$COMMAND"$ITEM" > "./$ITEM_LOG_FILE" 2>&1'
         eval "$EXECME"
     fi
 
     if [ ! -z "$SSH_SERVER" ]
     then
-        get_global_lock
-        scp "$SSH_KEY" "$ITEM_LOG_FILE" "$SSH_SERVER:~/$JOB_LOG"
-        release_global_lock
+        #get_global_lock
+        scp -q $SSH_OPTS $SSH_KEY $ITEM_LOG_FILE $SSH_SERVER:~/$JOB_LOG_DIR &
+        #release_global_lock
     fi
 
     start_single_worker
