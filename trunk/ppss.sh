@@ -63,6 +63,7 @@ PID="$$"
 LISTENER_PID=""
 IFS_BACKUP="$IFS"
 INTERVAL="30"                           # Polling interval to check if there are running jobs.
+CPUINFO=/proc/cpuinfo
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -379,9 +380,9 @@ do
                         fi
                         ;;
                         
-        --enable-ht|-j )
-                        HYPERTHREADING=yes
-                        add_var_to_config HYPERTHREADING "yes"
+        --disable-ht|-j )
+                        HYPERTHREADING=no
+                        add_var_to_config HYPERTHREADING $HYPERTHREADING
                         shift 1
                         ;;
         --log|-l )
@@ -695,7 +696,7 @@ get_no_of_cpus () {
 
     if [ -z "$HPT" ]
     then
-        HPT=no
+        HPT=yes
     fi
 
     got_cpu_info () {
@@ -709,7 +710,7 @@ get_no_of_cpus () {
     then
         if [ "$ARCH" == "Linux" ]
         then
-            NUMBER=`cat /proc/cpuinfo | grep processor | wc -l`
+            NUMBER=`grep ^processor $CPUINFO | wc -l`
             got_cpu_info "$?"
             
         elif [ "$ARCH" == "Darwin" ]
@@ -721,22 +722,36 @@ get_no_of_cpus () {
             NUMBER=`sysctl hw.ncpu | awk '{ print $2 }'`
             got_cpu_info "$?"
         else
-            NUMBER=`cat /proc/cpuinfo | grep processor | wc -l`
+            NUMBER=`grep ^processor $CPUINFO | wc -l`
             got_cpu_info "$?"
         fi
     elif [ "$HPT" == "no" ]
     then
+        log DEBUG "Hyperthreading is disabled."
         if [ "$ARCH" == "Linux" ]
         then
-            RES=`cat /proc/cpuinfo | grep "cpu cores"`
+            PHYSICAL=`grep 'physical id' $CPUINFO`
             if [ "$?" == "0" ]
             then
-                NUMBER=`cat /proc/cpuinfo | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g`
-                got_cpu_info "$?"
+                PHYSICAL=`grep 'physical id' $CPUINFO | sort | uniq | wc -l`
+                log DEBUG "Detected $PHYSICAL CPU(s)"
+                TMP=`grep 'cpu cores' $CPUINFO` 
+                if [ "$?" == "0" ]
+                then
+                    MULTICORE=`grep 'cpu cores' $CPUINFO | sort | uniq | cut -d ":" -f 2 | sed s/\ //g` 
+                    log DEBUG "Detected $MULTICORE cores per CPU."
+                    NUMBER=$(($PHYSICAL*$MULTICORE))
+                else
+                    log DEBUG "Starting job only for each physical CPU."
+                    NUMBER=$PHYSICAL
+                fi
             else
-                NUMBER=`cat /proc/cpuinfo | grep processor | wc -l`
+                log DEBUG "No 'physical id' section found in $CPUINFO."            
+                NUMBER=`grep ^processor $CPUINFO | wc -l`
                 got_cpu_info "$?"
             fi
+                
+
         elif [ "$ARCH" == "Darwin" ]
         then
             NUMBER=`sysctl -a hw | grep -w physicalcpu | awk '{ print $2 }'`
@@ -746,7 +761,7 @@ get_no_of_cpus () {
             NUMBER=`sysctl hw.ncpu | awk '{ print $2 }'`
             got_cpu_info "$?"
         else
-            NUMBER=`cat /proc/cpuinfo | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g`
+            NUMBER=`cat $CPUINFO | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g`
             got_cpu_info "$?"
         fi
 
@@ -849,7 +864,7 @@ upload_item () {
     log DEBUG "Uploading item $ITEM."
     if [ "$SECURE_COPY" == "1" ]
     then
-        scp -q $SSH_OPTS $SSH_KEY $ITEM $USER@$SSH_SERVER:$REMOTE_OUTPUT_DIR
+        scp -q $SSH_OPTS $SSH_KEY "$ITEM" $USER@$SSH_SERVER:$REMOTE_OUTPUT_DIR
         ERROR="$?"
         if [ ! "$ERROR" == "0" ]
         then
