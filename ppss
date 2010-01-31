@@ -2,43 +2,30 @@
 #
 # PPSS, the Parallel Processing Shell Script
 # 
-# Copyright (c) 2009, Louwrentius
-# All rights reserved.
+# Copyright (c) 2010, Louwrentius
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#     * Redistributions of source code must retain the above copyright
-#       notice, this list of conditions and the following disclaimer.
-#     * Redistributions in binary form must reproduce the above copyright
-#       notice, this list of conditions and the following disclaimer in the
-#       documentation and/or other materials provided with the distribution.
-#     * Neither the name of the <organization> nor the
-#       names of its contributors may be used to endorse or promote products
-#       derived from this software without specific prior written permission.
+# This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
 #
-# THIS SOFTWARE IS PROVIDED BY Louwrentius ''AS IS'' AND ANY
-# EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL Louwrentius BE LIABLE FOR ANY
-# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-#------------------------------------------------------------------------------
-# It should not be necessary to edit antyhing in this script..
-# Ofcource you can if it is necessary for your needs.
-# Send a patch if your changes may benefit others.
-#------------------------------------------------------------------------------
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    See <http://www.gnu.org/licenses/>
+#    for a copy of the GNU General Public License
+#
+# "Patches or other contributions are always welcome!"
+#
 
 # Handling control-c for a clean shutdown.
 trap 'kill_process' SIGINT 
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.50"
+SCRIPT_VERSION="2.55"
 
 # The first argument to this script can be a mode.
 MODES="node start config stop pause continue deploy status erase kill"
@@ -55,12 +42,7 @@ done
 # export PPSS_DIR=/path/to/workingdir
 if [ -z "$PPSS_DIR" ]
 then
-    PPSS_DIR="./ppss"
-fi
-
-if [ ! -e "$PPSS_DIR" ]
-then
-    mkdir -p "$PPSS_DIR"
+    PPSS_DIR="./ppss_dir"
 fi
 
 CONFIG=""
@@ -74,7 +56,7 @@ PAUSE_DELAY=60                                          # Polling every 1 minute
 STOP_SIGNAL="$PPSS_DIR/stop_signal"                     # Stop processing if this file is present.
 ARRAY_POINTER_FILE="$PPSS_DIR/ppss-array-pointer-$PID"  # Pointer for keeping track of processed items.
 JOB_LOG_DIR="$PPSS_DIR/job_log"                         # Directory containing log files of processed items.
-LOGFILE="$PPSS_DIR/ppss-log-$$.txt"                     # General PPSS log file. Contains lots of info.
+LOGFILE="$PPSS_DIR/ppss-log-$PID.txt"                     # General PPSS log file. Contains lots of info.
 STOP=0                                                  # STOP job.
 MAX_DELAY=0                                             # MAX DELAY between jobs.
 MAX_LOCK_DELAY=9                                        #
@@ -89,13 +71,12 @@ KILL_KEY=$RANDOM$RANDOM$RANDOM
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
 SSH_KNOWN_HOSTS=""
-SSH_SOCKET="$PPSS_DIR/PPSS_SSH_SOCKET"          # Multiplex multiple SSH connections over 1 master.
+SSH_SOCKET="/tmp/ppss_ssh_socket"          # Multiplex multiple SSH connections over 1 master.
 SSH_OPTS="-o BatchMode=yes -o ControlPath=$SSH_SOCKET \
                            -o GlobalKnownHostsFile=./known_hosts \
                            -o ControlMaster=auto \
                            -o Cipher=blowfish \
                            -o ConnectTimeout=10 "
-
                                         # Blowfish is faster but still secure. 
 SSH_MASTER_PID=""
 
@@ -174,10 +155,6 @@ showusage_normal () {
 if [ "$#" == "0" ]
 then
     showusage_short
-    if [ -e "$PPSS_DIR" ]
-    then
-        rm -rf "$PPSS_DIR" 
-    fi
     exit 1
 fi
 
@@ -377,6 +354,7 @@ add_var_to_config () {
 while [ $# -gt 0 ]
 do
     case $1 in
+
         --config|-C )
                         CONFIG="$2"
 
@@ -409,17 +387,26 @@ do
 
                         if [ ! -e "./known_hosts" ]
                         then
-                            if [ -e $SSH_KNOWN_HOSTS ]
+                            if [ -e $SSH_KNOWN_HOSTS ] 
                             then
-                                cat $SSH_KNOWN_HOSTS > ./known_hosts
+                                if [ ! "$SSH_KNOWN_HOSTS" == "known_hosts" ] 
+                                then
+                                    cat $SSH_KNOWN_HOSTS > ./known_hosts
+                                fi
                             else
                                 echo "File $SSH_KNOWN_HOSTS does not exist."
                                 exit
                             fi
                         fi
-
                         shift 2
                         ;;
+
+      --working-dir|-w )
+                        PPSS_DIR="$2"
+                        add_var_to_config PPSS_DIR "$PPSS_DIR"
+                        shift 2
+                        ;;
+
              --node|-n ) 
                         NODES_FILE="$2"
                         add_var_to_config NODES_FILE "$NODES_FILE"
@@ -453,17 +440,9 @@ do
 
                     -h )
                         showusage_normal
-                        if [ -e "$PPSS_DIR" ]
-                        then
-                            rm -rf "$PPSS_DIR" 
-                        fi
                         exit 1;;
                  --help)
                         showusage_long
-                        if [ -e "$PPSS_DIR" ]
-                        then
-                            rm -rf "$PPSS_DIR" 
-                        fi
                         exit 1;;
           --homedir|-H )
                         if [ ! -z "$2" ]
@@ -572,10 +551,18 @@ display_header () {
     log INFO "---------------------------------------------------------"
 }
 
+create_working_directory () {
+
+    if [ ! -e "$PPSS_DIR" ]
+    then
+        mkdir -p "$PPSS_DIR"
+    fi
+}
 
 # Init all vars
 init_vars () {
 
+    create_working_directory
 
     if [ "$ARCH" == "Darwin" ]
     then
@@ -895,7 +882,6 @@ deploy_ppss () {
 start_ppss_on_node () {
 
     NODE="$1"
-
     log INFO "Starting PPSS on node $NODE."
     ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
 }
@@ -1331,6 +1317,12 @@ get_item () {
 
 start_single_worker () {
 
+        #
+        # This function sends an item to the fifo. This signals
+        # the listener process to execute a 'worker' on this
+        # item, using the 'commando' function.
+        # 
+
     get_item
     ERROR=$?
     if [ ! "$ERROR" == "0" ]
@@ -1369,6 +1361,20 @@ elapsed () {
 }
 
 commando () {
+
+    #
+    # This function will start a chain reaction of events.
+    #
+    # The commando executes a command on an item and, when finished,
+    # executes the start_single_worker. This function selects a new
+    # item and sends it to the fifo. The listener process receives
+    # the item and excutes this commando function on the item.
+    # So in essence, the commando function keeps calling itself 
+    # indirectly until no items are left. This will form a single
+    # working queue. By executing multiple start_single_worker 
+    # functions based on the CPU cores available, parallel processing
+    # is achieved, with a queue for each core.
+    #
 
     ITEM="$1"
 
@@ -1720,6 +1726,7 @@ main () {
                     ;;
              start )
                     # This option only starts all nodes.
+                    LOGFILE=/dev/null
                     display_header
                     if [ ! -e "$NODES_FILE" ]
                     then
@@ -1737,6 +1744,7 @@ main () {
                     exit 0
                     ;;
         config )
+                    LOGFILE=/dev/null
                     display_header
                     log INFO "Generating configuration file $CONFIG"
                     add_var_to_config PPSS_LOCAL_TMPDIR "$PPSS_LOCAL_TMPDIR"
@@ -1746,6 +1754,7 @@ main () {
                     ;;
 
         stop )
+                    LOGFILE=/dev/null
                     display_header
                     log INFO "Stopping PPSS on all nodes."
                     exec_cmd "touch $STOP_SIGNAL"
@@ -1753,6 +1762,7 @@ main () {
                     exit
                     ;;
         pause )
+                    LOGFILE=/dev/null
                     display_header
                     log INFO "Pausing PPSS on all nodes."
                     exec_cmd "touch $PAUSE_SIGNAL"
@@ -1760,6 +1770,7 @@ main () {
                     exit
                     ;;
         continue )
+                    LOGFILE=/dev/null
                     display_header
                     if does_file_exist "$STOP_SIGNAL"
                     then
@@ -1775,6 +1786,7 @@ main () {
                     exit 0
                     ;;
         deploy )
+                    LOGFILE=/dev/null
                     display_header
                     log INFO "Deploying PPSS on nodes."
                     deploy_ppss
@@ -1783,12 +1795,14 @@ main () {
                     exit 0
                     ;;
         status )
+                    LOGFILE=/dev/null
                     display_header
                     show_status
                     cleanup
                     exit 0
                     ;;
         erase )
+                    LOGFILE=/dev/null
                     display_header
                     log INFO "Erasing PPSS from all nodes."
                     erase_ppss
@@ -1796,6 +1810,7 @@ main () {
                     exit 0
                     ;;
         kill )
+                    LOGFILE=/dev/null
                     for x in `ps ux | grep ppss | grep -v grep | grep bash | awk '{ print $2 }'`
                     do          
                          kill "$x"
