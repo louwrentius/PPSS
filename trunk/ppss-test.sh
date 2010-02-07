@@ -1,9 +1,9 @@
 #!/bin/bash
 
 DEBUG="$1"
-VERSION=2.55
+VERSION=2.56
 TMP_DIR="ppss"
-PPSS=./ppss_new
+PPSS=./ppss
 PPSS_DIR=ppss_dir
 
 cleanup () {
