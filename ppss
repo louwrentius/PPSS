@@ -1200,12 +1200,12 @@ get_all_items () {
     then
         if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
         then
-            ITEMS=`exec_cmd "ls -1 $SRC_DIR"`
+            ITEMS=`exec_cmd "find $SRC_DIR -type f"`
             check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
         else 
             if [ -e "$SRC_DIR" ]
             then
-                ITEMS=`ls -1 $SRC_DIR`
+                ITEMS=`find $SRC_DIR -type f`
             else
                 ITEMS=""
             fi
@@ -1401,7 +1401,7 @@ commando () {
         then
             log DEBUG "Using item straight from the server."
         else
-            ITEM="$SRC_DIR/$ITEM"
+            ITEM="$ITEM"
         fi
     else
         ITEM="./$PPSS_LOCAL_TMPDIR/$ITEM_NO_PATH"

@@ -3,7 +3,7 @@
 DEBUG="$1"
 VERSION=2.55
 TMP_DIR="ppss"
-PPSS=./ppss
+PPSS=./ppss_new
 PPSS_DIR=ppss_dir
 
 cleanup () {
@@ -98,7 +98,7 @@ testSpacesInFilenames () {
 
     createDirectoryWithSomeFiles
 
-    RES=$( { ./$PPSS -d /tmp/$TMP_DIR -c 'ls -alh ' >> /dev/null ; } 2>&1 )  
+    RES=$( { ./$PPSS -d /tmp/$TMP_DIR -c 'ls -alh ' >> log.txt ; } 2>&1 )  
 	assertEquals "PPSS did not execute properly." 0 "$?"
 
     assertNull "PPSS retured some errors..." "$RES"
@@ -116,7 +116,7 @@ testSpacesInFilenames () {
 
 testSpecialCharacterHandling () {
 
-    RES=$( { ./$PPSS -f "$INPUTFILESPECIAL" -c 'echo ' >> /dev/null ; } 2>&1 )  
+    RES=$( { ./$PPSS -f "$INPUTFILESPECIAL" -c 'echo ' >> log.txt ; } 2>&1 )  
 	assertEquals "PPSS did not execute properly." 0 "$?"
 
     assertNull "PPSS retured some errors..." "$RES"
