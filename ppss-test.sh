@@ -126,7 +126,8 @@ testSpecialCharacterHandling () {
     fi
 
     RES=`find ppss_dir/PPSS_LOCAL_OUTPUT | wc -l | sed 's/\ //g'`
-    assertEquals "To many lock files..." "7" "$RES"
+    LINES=`wc -l "$INPUTFILESPECIAL" | awk '{ print $1 }'`
+    assertEquals "To many lock files..." "$((LINES+1))" "$RES"
 
     RES1=`ls -1 $JOBLOG`
     RES2=`ls -1 $LOCALOUTPUT`
