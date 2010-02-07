@@ -1133,11 +1133,6 @@ upload_item () {
     ITEM="$1"
     ITEMDIR="$2"
 
-    if [ "$TRANSFER_TO_SLAVE" == "0" ]
-    then
-        log DEBUG "File transfer is disabled."
-        return 0
-    fi
 
     log DEBUG "Uploading item $ITEM."
     if [ "$SECURE_COPY" == "1" ]
@@ -1482,12 +1477,18 @@ commando () {
         escape_item "$DIRNAME"
         ITEM_OUTPUT_DIR="$REMOTE_OUTPUT_DIR/$ITEM_ESCAPED"
 
-        exec_cmd "mkdir -p $ITEM_OUTPUT_DIR"
-        if [ "$DIRNAME" == "." ]
+        if [ "$TRANSFER_TO_SLAVE" == "0" ]
         then
-            DIRNAME=""
+            log DEBUG "File transfer is disabled."
+        else
+            exec_cmd "mkdir -p $ITEM_OUTPUT_DIR"
+            if [ "$DIRNAME" == "." ]
+            then
+                DIRNAME=""
+            fi
+            upload_item "$PPSS_LOCAL_OUTPUT/$ITEM_NO_PATH" "$DIRNAME"
         fi
-        upload_item "$PPSS_LOCAL_OUTPUT/$ITEM_NO_PATH" "$DIRNAME"
+
         
         elapsed "$BEFORE" "$AFTER" >> "$ITEM_LOG_FILE"
         echo -e "" >> "$ITEM_LOG_FILE"

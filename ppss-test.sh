@@ -3,7 +3,7 @@
 DEBUG="$1"
 VERSION=2.55
 TMP_DIR="ppss"
-PPSS=ppss
+PPSS=./ppss
 PPSS_DIR=ppss_dir
 
 cleanup () {
@@ -29,14 +29,12 @@ parseJobStatus () {
 
 oneTimeSetUp () {
 
-	NORMALTESTFILES=`echo test-{a..z}`
-    SPECIALTESTFILES="\'file-!@#$%^&*()_+=-0987654321~\' \'file-/\<>?:;'{}[]\' file-/\/\:\/!@#$%^&*()_+=-0987654321~ file-/\<>?:;'{}[] http://www.google.nl ftp://storage.nl"
 	JOBLOG=./$PPSS_DIR/job_log
 	INPUTFILENORMAL=test-normal.input
     INPUTFILESPECIAL=test-special.input
     LOCALOUTPUT=ppss_dir/PPSS_LOCAL_OUTPUT
 
-	REMOVEFILES="$INPUTFILENORMAL $INPUTFILESPECIAL $PPSS_DIR test-ppss-*"
+	REMOVEFILES="$PPSS_DIR test-ppss-*"
 
     cleanup
 
