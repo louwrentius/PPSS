@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DEBUG="$1"
-VERSION=2.56
+VERSION="2.56b2"
 TMP_DIR="ppss"
 PPSS=./ppss
 PPSS_DIR=ppss_dir
@@ -37,16 +37,6 @@ oneTimeSetUp () {
 	REMOVEFILES="$PPSS_DIR test-ppss-*"
 
     cleanup
-
-	for x in $NORMALTESTFILES
-	do
-		echo "$x" >> "$INPUTFILENORMAL"
-	done
-
-    for x in $SPECIALTESTFILES
-    do
-        echo $x >> "$INPUTFILESPECIAL"
-    done
 }
 
 testVersion () {
@@ -85,19 +75,42 @@ createDirectoryWithSomeFiles () {
 
     A="File with Spaces"
     B="File\With\Slashes"
+    c="symnlink1"
+    d="symnlink2"
 
-    mkdir "/tmp/$TMP_DIR"
-    for x in "$A" "$B"
-    do
-        TMP_FILE="/tmp/$TMP_DIR/$x"
-        touch "$TMP_FILE"
-    done
+    TMP_FILE="/tmp/$TMP_DIR"
+    if [ ! -e "$TMP_FILE" ]
+    then
+        mkdir "$TMP_FILE"
+    fi
+
+    touch "$A"
+    touch "$B"
+    ln -s /etc/resolve.conf "$TMP_FILE"/
+    ln -s /etc/hosts "$TMP_FILE"/
+}
+
+testRecursion () {
+
+    createDirectoryWithSomeFiles
+
+    #Execution of PPSS with recursion disabled.
+    RES=$( { ./$PPSS -d /tmp/$TMP_DIR -c 'ls -alh ' -r  >> /dev/null ; } 2>&1 )  
+	assertEquals "PPSS did not execute properly." 0 "$?"
+
+    NUMBER=`find /tmp/$TMP_DIR ! -type d | wc -l`
+    LOGS=`ls -1 $JOBLOG/* | wc -l`
+    assertEquals "Did not find equal files and joblogs $TMP_FILE" "$NUMBER" "$LOGS" 
+
+    rm -rf "/tmp/$TMP_DIR"   
+    rename-ppss-dir $FUNCNAME
+
 }
 
 testSpacesInFilenames () {
 
     createDirectoryWithSomeFiles
-
+    #Regular execution of PPSS
     RES=$( { ./$PPSS -d /tmp/$TMP_DIR -c 'ls -alh ' >> /dev/null ; } 2>&1 )  
 	assertEquals "PPSS did not execute properly." 0 "$?"
 
@@ -109,6 +122,10 @@ testSpacesInFilenames () {
     
     grep "SUCCESS" $JOBLOG/* >> /dev/null 2>&1
     assertEquals "Found error with space in filename $TMP_FILE" "0" "$?"
+
+    NUMBER=`find /tmp/$TMP_DIR ! -type d | wc -l`
+    LOGS=`ls -1 $JOBLOG/* | wc -l`
+    assertEquals "Did not find equal files and joblogs $TMP_FILE" "$NUMBER" "$LOGS" 
 
     rm -rf "/tmp/$TMP_DIR"   
     rename-ppss-dir $FUNCNAME
