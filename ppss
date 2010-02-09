@@ -25,7 +25,7 @@ trap 'kill_process' SIGINT
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.56"
+SCRIPT_VERSION="2.56b2"
 
 # The first argument to this script can be a mode.
 MODES="node start config stop pause continue deploy status erase kill"
@@ -67,6 +67,7 @@ CPUINFO=/proc/cpuinfo
 PROCESSORS=""
 STOP_KEY=$RANDOM$RANDOM$RANDOM
 KILL_KEY=$RANDOM$RANDOM$RANDOM
+RECURSION="1"
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -97,8 +98,8 @@ showusage_short () {
     echo "|P|P|S|S| $SCRIPT_NAME $SCRIPT_VERSION"
     echo
     echo "usage: $0 [ -d <sourcedir> | -f <sourcefile> ]  [ -c '<command> \"\$ITEM\"' ]"
-    echo "                 [ -C <configfile> ]  [ -j ] [ -l <logfile> ] [ -p <# jobs> ]"
-    echo "                 [ -D <delay> ] [ -h ] [ --help ]" 
+    echo "                 [ -C <configfile> ] [ -j ] [ -l <logfile> ] [ -p <# jobs> ]"
+    echo "                 [ -D <delay> ] [ -h ] [ --help ] [ -r ] " 
     echo
     echo "Examples:"
     echo "                 $0 -d /dir/with/some/files -c 'gzip '" 
@@ -143,6 +144,10 @@ showusage_normal () {
     echo
     echo -e "--delay | -D       Adds an initial random delay to the start of all parallel jobs to spread"
     echo -e "                   the load. The delay is only used at the start of all 'threads'."
+    echo
+    echo -e "--no-recurse | -r  By default, recursion of directories is enabled when the -d option is "
+    echo -e "                   used. If this is not prefered, this can be disabled with this option "
+    echo -e "                   Only files within the specified directory will be processed."
     echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
@@ -205,6 +210,10 @@ showusage_long () {
     echo
     echo -e "--delay | -D       Adds an initial random delay to the start of all parallel jobs to spread"
     echo -e "                   the load. The delay is only used at the start of all 'threads'."
+    echo 
+    echo -e "--no-recurse | -r  By default, recursion of directories is enabled when the -d option is "
+    echo -e "                   used. If this is not prefered, this can be disabled with this option "
+    echo -e "                   Only files within the specified directory will be processed."
     echo 
     echo -e "The following options are used for distributed execution of PPSS."
     echo 
@@ -463,6 +472,11 @@ do
                         add_var_to_config LOGFILE "$LOGFILE"
                         shift 2
                         ;;
+       --no-recurse|-r )
+                        RECURSION="0"
+                        add_var_to_config LOGFILE "$RECURSION"
+                        shift 1
+                        ;;
        --workingdir|-w ) 
                         WORKINGDIR="$2"
                         add_var_to_config WORKINGDIR "$WORKINGDIR"
@@ -542,13 +556,13 @@ done
 
 display_header () {
 
-    log info ""
-    log INFO "========================================================="
-    log INFO "                       |P|P|S|S|                         "
-    log INFO "$SCRIPT_NAME version $SCRIPT_VERSION"
-    log INFO "========================================================="
-    log INFO "Hostname:\t\t$HOSTNAME"
-    log INFO "---------------------------------------------------------"
+    log DSPLY ""
+    log DSPLY "========================================================="
+    log DSPLY "                       |P|P|S|S|                         "
+    log DSPLY "$SCRIPT_NAME vers. $SCRIPT_VERSION"
+    log DSPLY "========================================================="
+    log DSPLY "Hostname:\t\t$HOSTNAME"
+    log DSPLY "---------------------------------------------------------"
 }
 
 create_working_directory () {
@@ -605,20 +619,20 @@ init_vars () {
     if [ -e "$CPUINFO" ]
     then
         CPU=`cat /proc/cpuinfo | grep 'model name' | cut -d ":" -f 2 | sed -e s/^\ //g | sort | uniq`
-        log INFO "CPU: $CPU"
+        log DSPLY "CPU: $CPU"
     elif [ "$ARCH" == "Darwin" ]
     then
         MODEL=`system_profiler SPHardwareDataType | grep "Processor Name" | cut -d ":" -f 2`
         SPEED=`system_profiler SPHardwareDataType | grep "Processor Speed" | cut -d ":" -f 2`
-        log INFO "CPU: $MODEL $SPEED"
+        log DSPLY "CPU: $MODEL $SPEED"
     elif [ "$ARCH" == "SunOS" ]
     then
         CPU=`psrinfo -v | grep MHz | cut -d " " -f 4,8 | awk '{ printf ("Processor architecture: %s @ %s MHz.\n", $1,$2) }' | head -n 1`
         
-        log INFO "$CPU"
+        log DSPLY "$CPU"
     else
-        log INFO "CPU: Cannot determine. Provide a patch for your arch!"
-        log INFO "Arch is $ARCH"
+        log DSPLY "CPU: Cannot determine. Provide a patch for your arch!"
+        log DSPLY "Arch is $ARCH"
     fi 
 
     if [ -z "$MAX_NO_OF_RUNNING_JOBS" ]
@@ -712,9 +726,16 @@ log () {
     LOG_MSG="$PREFIX $MESG"
     ECHO_MSG="$PREFIX_SMALL $MESG"
 
-    echo -e "$LOG_MSG" >> "$LOGFILE"
+    if [ ! -z "$PPSSDEBUG" ] && [ ! "$PPSSDEBUG" == "0" ]
+    then
+        echo -e "$LOG_MSG" >> "$LOGFILE"
 
-    if [ "$TYPE" == "INFO" ] || [ "$TYPE" == "ERROR" ] || [ "$TYPE" == "WARN" ]
+    elif [ "$TYPE" == "INFO" ] || [ "$TYPE" == "ERROR" ] || [ "$TYPE" == "WARN" ] || [ "$TYPE" == "DSPLY" ]
+    then
+        echo -e "$LOG_MSG" >> "$LOGFILE"
+    fi
+
+    if [ "$TYPE" == "DSPLY" ] || [ "$TYPE" == "ERROR" ] || [ "$TYPE" == "WARN" ]
     then
         echo -e "$ECHO_MSG"
     fi
@@ -751,7 +772,7 @@ erase_ppss () {
             ssh -q $SSH_KEY $SSH_OPTS $USER@$NODE "rm -rf $PPSS_HOME_DIR"
         done
     else
-        log INFO "Aborting.."
+        log DSPLY "Aborting.."
     fi
     sleep 1
 }
@@ -813,9 +834,9 @@ deploy () {
 
     if [ "$ERROR" == "0" ]
     then
-        log INFO "PPSS installed on node $NODE."
+        log DSPLY "PPSS installed on node $NODE."
     else
-        log INFO "PPSS failed to install on $NODE."
+        log DSPLY "PPSS failed to install on $NODE."
     fi
 
     kill $SSH_PID
@@ -826,7 +847,7 @@ deploy_ppss () {
     
     if [ -z "$NODES_FILE" ]
     then
-        log INFO "ERROR - are you using the right option? -C ?"
+        log ERROR "ERROR - are you using the right option? -C ?"
         set_status ERROR
         cleanup 
         exit 1
@@ -882,7 +903,7 @@ deploy_ppss () {
 start_ppss_on_node () {
 
     NODE="$1"
-    log INFO "Starting PPSS on node $NODE."
+    log DSPLY "Starting PPSS on node $NODE."
     ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
 }
 
@@ -951,12 +972,12 @@ get_no_of_cpus () {
 
         if [ ! -z "$NUMBER" ]
         then
-            log INFO "Found $NUMBER logic processors."
+            log DSPLY "Found $NUMBER logic processors."
         fi
 
     elif [ "$HPT" == "no" ]
     then
-        log INFO "Hyperthreading is disabled."
+        log DSPLY "Hyperthreading is disabled."
 
         if [ "$ARCH" == "Linux" ]
         then
@@ -966,9 +987,9 @@ get_no_of_cpus () {
                 PHYSICAL=`grep 'physical id' $CPUINFO | sort | uniq | wc -l`
                 if [ "$PHYSICAL" == "1" ]
                 then
-                    log INFO "Found $PHYSICAL physical CPU."
+                    log DSPLY "Found $PHYSICAL physical CPU."
                 else
-                    log INFO "Found $PHYSICAL physical CPUs."
+                    log DSPLY "Found $PHYSICAL physical CPUs."
                 fi
 
                 TMP=`grep 'core id' $CPUINFO` 
@@ -976,10 +997,10 @@ get_no_of_cpus () {
                 then
                     log DEBUG "Starting job only for each physical core on all physical CPU(s)."
                     NUMBER=`grep 'core id' $CPUINFO | sort | uniq | wc -l` 
-                    log INFO "Found $NUMBER physical cores."
+                    log DSPLY "Found $NUMBER physical cores."
                 else
-                    log INFO "Single core processor(s) detected."
-                    log INFO "Starting job for each physical CPU."
+                    log DSPLY "Single core processor(s) detected."
+                    log DSPLY "Starting job for each physical CPU."
                     NUMBER=$PHYSICAL
                 fi
             else
@@ -1200,12 +1221,25 @@ get_all_items () {
     then
         if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
         then
-            ITEMS=`exec_cmd "find $SRC_DIR -type f"`
-            check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
+            if [ "$RECURSION" == "1" ]
+            then
+                ITEMS=`exec_cmd "find $SRC_DIR ! -type d"`
+                check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
+            else
+                log DEBUG "Recursion is disabled."
+                ITEMS=`exec_cmd "ls -1 $SRC_DIR"`
+                check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
+            fi
         else 
             if [ -e "$SRC_DIR" ]
             then
-                ITEMS=`find $SRC_DIR -type f`
+                if [ "$RECURSION" == "1" ]
+                then
+                    ITEMS=`find "$SRC_DIR" ! -type d`
+                else
+                    log DEBUG "Recursion is disabled."
+                    ITEMS=`ls -1 "$SRC_DIR"`
+                fi
             else
                 ITEMS=""
             fi
@@ -1537,9 +1571,9 @@ listen_for_job () {
                 RES=$((MAX_NO_OF_RUNNING_JOBS-DIED))
                 if [ "$RES" == "1" ]
                 then
-                    log INFO "$((MAX_NO_OF_RUNNING_JOBS-DIED)) job is remaining.       "
+                    log DSPLY "$((MAX_NO_OF_RUNNING_JOBS-DIED)) job is remaining.       "
                 else
-                    log INFO "$((MAX_NO_OF_RUNNING_JOBS-DIED)) jobs are remaining."
+                    log DSPLY "$((MAX_NO_OF_RUNNING_JOBS-DIED)) jobs are remaining."
                     echo -en "\033[1A"
                 fi
             fi
@@ -1596,7 +1630,7 @@ listen_for_job () {
         PERCENT=$((100 * $ARRAY_POINTER / $SIZE_OF_ARRAY ))
         if [ "$DIED" == "0" ] && [ "$FINISHED" == "0" ]
         then
-            log INFO "Currently $PERCENT percent complete. Processed $ARRAY_POINTER of $SIZE_OF_ARRAY items." 
+            log DSPLY "Currently $PERCENT percent complete. Processed $ARRAY_POINTER of $SIZE_OF_ARRAY items." 
             if [ "$PERCENT" == "100" ]
             then
                 FINISHED=1
@@ -1611,10 +1645,10 @@ listen_for_job () {
     if [ ! "$PERCENT" == "100" ]
     then
         echo
-        log INFO "Finished. Consult $JOB_LOG_DIR for job output."
-        log INFO "Press ENTER to continue."
+        log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
+        log DSPLY "Press ENTER to continue."
     else
-        log INFO "Finished. Consult $JOB_LOG_DIR for job output."
+        log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
     fi
     cleanup
 }
@@ -1624,11 +1658,11 @@ start_all_workers () {
 
     if [ "$MAX_NO_OF_RUNNING_JOBS" == "1" ]
     then
-        log INFO "Starting $MAX_NO_OF_RUNNING_JOBS single worker."
+        log DSPLY "Starting $MAX_NO_OF_RUNNING_JOBS single worker."
     else
-        log INFO "Starting $MAX_NO_OF_RUNNING_JOBS parallel workers."
+        log DSPLY "Starting $MAX_NO_OF_RUNNING_JOBS parallel workers."
     fi
-    log INFO "---------------------------------------------------------"
+    log DSPLY "---------------------------------------------------------"
 
     i=0
     while [ "$i" -lt "$MAX_NO_OF_RUNNING_JOBS" ]
@@ -1673,20 +1707,20 @@ show_status () {
     PROCESSED=`exec_cmd "ls -1 $ITEM_LOCK_DIR | wc -l"` 2>&1 >> /dev/null
     TMP_STATUS=$((100 * $PROCESSED / $ITEMS))
 
-    log INFO "Status:\t\t$TMP_STATUS percent complete."
+    log DSPLY "Status:\t\t$TMP_STATUS percent complete."
 
     if [ ! -z $NODES_FILE ]
     then
         TMP_NO=`cat $NODES_FILE | wc -l`
-        log INFO "Nodes:\t $TMP_NO"
+        log DSPLY "Nodes:\t $TMP_NO"
     fi
-    log INFO "Items:\t\t$ITEMS"
+    log DSPLY "Items:\t\t$ITEMS"
 
 
-    log INFO "---------------------------------------------------------"
+    log DSPLY "---------------------------------------------------------"
     HEADER=`echo IP-address Hostname Processed Status | awk '{ printf ("%-16s %-18s % 10s %10s\n",$1,$2,$3,$4) }'`  
-    log INFO "$HEADER"
-    log INFO "---------------------------------------------------------"
+    log DSPLY "$HEADER"
+    log DSPLY "---------------------------------------------------------"
     PROCESSED=0
     for x in `cat $NODES_FILE`
     do
@@ -1705,11 +1739,11 @@ show_status () {
         fi
         let PROCESSED=$PROCESSED+$RES
         LINE=`echo "$x $NODE $RES $STATUS" | awk '{ printf ("%-16s %-18s % 10s %10s\n",$1,$2,$3,$4) }'`
-        log INFO "$LINE"
+        log DSPLY "$LINE"
     done
-    log INFO "---------------------------------------------------------"
+    log DSPLY "---------------------------------------------------------"
     LINE=`echo $PROCESSED | awk '{ printf ("Total processed: % 29s\n",$1) }'`
-    log INFO "$LINE"
+    log DSPLY "$LINE"
 }
 
 
@@ -1747,7 +1781,7 @@ main () {
         config )
                     LOGFILE=/dev/null
                     display_header
-                    log INFO "Generating configuration file $CONFIG"
+                    log DSPLY "Generating configuration file $CONFIG"
                     add_var_to_config PPSS_LOCAL_TMPDIR "$PPSS_LOCAL_TMPDIR"
                     add_var_to_config PPSS_LOCAL_OUTPUT "$PPSS_LOCAL_OUTPUT"
                     cleanup
@@ -1757,7 +1791,7 @@ main () {
         stop )
                     LOGFILE=/dev/null
                     display_header
-                    log INFO "Stopping PPSS on all nodes."
+                    log DSPLY "Stopping PPSS on all nodes."
                     exec_cmd "touch $STOP_SIGNAL"
                     cleanup
                     exit
@@ -1765,7 +1799,7 @@ main () {
         pause )
                     LOGFILE=/dev/null
                     display_header
-                    log INFO "Pausing PPSS on all nodes."
+                    log DSPLY "Pausing PPSS on all nodes."
                     exec_cmd "touch $PAUSE_SIGNAL"
                     cleanup
                     exit
@@ -1775,12 +1809,12 @@ main () {
                     display_header
                     if does_file_exist "$STOP_SIGNAL"
                     then
-                        log INFO "Continuing processing, please use $0 start to start PPSS on al nodes."
+                        log DSPLY "Continuing processing, please use $0 start to start PPSS on al nodes."
                         exec_cmd "rm -f $STOP_SIGNAL"
                     fi
                     if does_file_exist "$PAUSE_SIGNAL"
                     then
-                        log INFO "Continuing PPSS on all nodes."
+                        log DSPLY "Continuing PPSS on all nodes."
                         exec_cmd "rm -f $PAUSE_SIGNAL"
                     fi
                     cleanup
@@ -1789,7 +1823,7 @@ main () {
         deploy )
                     LOGFILE=/dev/null
                     display_header
-                    log INFO "Deploying PPSS on nodes."
+                    log DSPLY "Deploying PPSS on nodes."
                     deploy_ppss
                     wait
                     cleanup
@@ -1805,7 +1839,7 @@ main () {
         erase )
                     LOGFILE=/dev/null
                     display_header
-                    log INFO "Erasing PPSS from all nodes."
+                    log DSPLY "Erasing PPSS from all nodes."
                     erase_ppss
                     cleanup
                     exit 0
