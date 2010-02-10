@@ -46,28 +46,28 @@ then
 fi
 
 CONFIG=""
-HOSTNAME=`hostname`
-ARCH=`uname`
+HOSTNAME="`hostname`"
+ARCH="`uname`"
 
 PID="$$"
 GLOBAL_LOCK="$PPSS_DIR/PPSS-GLOBAL-LOCK-$PID"           # Global lock file used by local PPSS instance.
 PAUSE_SIGNAL="$PPSS_DIR/pause_signal"                   # Pause processing if this file is present.
-PAUSE_DELAY=60                                          # Polling every 1 minutes by default.
+PAUSE_DELAY="60"                                          # Polling every 1 minutes by default.
 STOP_SIGNAL="$PPSS_DIR/stop_signal"                     # Stop processing if this file is present.
 ARRAY_POINTER_FILE="$PPSS_DIR/ppss-array-pointer-$PID"  # Pointer for keeping track of processed items.
 JOB_LOG_DIR="$PPSS_DIR/job_log"                         # Directory containing log files of processed items.
 LOGFILE="$PPSS_DIR/ppss-log-$PID.txt"                     # General PPSS log file. Contains lots of info.
-STOP=0                                                  # STOP job.
-MAX_DELAY=0                                             # MAX DELAY between jobs.
-MAX_LOCK_DELAY=9                                        #
+STOP="0"                                                  # STOP job.
+MAX_DELAY="0"                                             # MAX DELAY between jobs.
+MAX_LOCK_DELAY="9"                                        #
 PERCENT="0"
 LISTENER_PID=""
 IFS_BACKUP="$IFS"
-CPUINFO=/proc/cpuinfo
+CPUINFO="/proc/cpuinfo"
 PROCESSORS=""
-STOP_KEY=$RANDOM$RANDOM$RANDOM
-KILL_KEY=$RANDOM$RANDOM$RANDOM
-RECURSION="1"
+STOP_KEY="$RANDOM$RANDOM$RANDOM"                        # This is a signal to the listener to stop.
+KILL_KEY="$RANDOM$RANDOM$RANDOM"                        # This is a signal to stop immediately and kill
+RECURSION="1"                                           # all running processes.
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -81,7 +81,7 @@ SSH_OPTS="-o BatchMode=yes -o ControlPath=$SSH_SOCKET \
                                         # Blowfish is faster but still secure. 
 SSH_MASTER_PID=""
 
-PPSS_HOME_DIR=ppss
+PPSS_HOME_DIR="ppss"
 ITEM_LOCK_DIR="$PPSS_DIR/PPSS_ITEM_LOCK_DIR"      # Remote directory on master used for item locking.
 PPSS_LOCAL_TMPDIR="$PPSS_DIR/PPSS_LOCAL_TMPDIR"   # Local directory on slave for local processing.
 PPSS_LOCAL_OUTPUT="$PPSS_DIR/PPSS_LOCAL_OUTPUT"   # Local directory on slave for local output.
@@ -1125,7 +1125,7 @@ download_item () {
 
     if [ "$TRANSFER_TO_SLAVE" == "1" ]
     then
-        log DEBUG "Transfering item $ITEM_NO_PATH to local disk."
+        log DEBUG "Transfering item $ITEM_NO_PATH from source to local disk."
         if [ "$SECURE_COPY" == "1" ] && [ ! -z "$SSH_SERVER" ] 
         then
             if [ ! -z "$SRC_DIR" ]
@@ -1424,7 +1424,7 @@ commando () {
         OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$ITEM_NO_PATH"
     fi
 
-    log DEBUG "Processing item $ITEM"
+    log DEBUG "Processing item: $ITEM"
     #
     # Decide if an item must be transfered from server to the node.
     # or be processed in-place (NFS / SMB mount?)
@@ -1433,7 +1433,7 @@ commando () {
     then
         if [ -z "$SRC_DIR" ] && [ ! -z "$INPUT_FILE" ]
         then
-            log DEBUG "Using item straight from the server."
+            log DEBUG "Using item straight from the server, no copy."
         else
             ITEM="$ITEM"
         fi
@@ -1859,16 +1859,16 @@ main () {
                     get_all_items
                     listen_for_job "$MAX_NO_OF_RUNNING_JOBS" & 2>&1 >> /dev/null
                     LISTENER_PID=$!
-                    #log DEBUG "Master PID is $PID."
-                    #log DEBUG "Listener PID is $LISTENER_PID."
                     start_all_workers
                     ;;
-
     esac
-
 }
+#
 # This command starts the that sets the whole framework in motion.
+#
 main
 
+#
 # Exit after all processes have finished.
+#
 wait 
