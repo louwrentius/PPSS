@@ -25,7 +25,7 @@ trap 'kill_process' SIGINT
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.56b2"
+SCRIPT_VERSION="2.56b3"
 
 # The first argument to this script can be a mode.
 MODES="node start config stop pause continue deploy status erase kill"
@@ -68,6 +68,8 @@ PROCESSORS=""
 STOP_KEY="$RANDOM$RANDOM$RANDOM"                        # This is a signal to the listener to stop.
 KILL_KEY="$RANDOM$RANDOM$RANDOM"                        # This is a signal to stop immediately and kill
 RECURSION="1"                                           # all running processes.
+START_PPSS="$(date +%s)"
+STOP_PPSS=""
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -1372,6 +1374,12 @@ start_single_worker () {
     fi
 }
 
+stop-ppss () {
+
+   STOP_PPSS="$(date +%s)"
+   elapsed "$START_PPSS" "$STOP_PPSS"
+}
+
 
 elapsed () {
 
@@ -1386,7 +1394,8 @@ elapsed () {
     SECS="$(expr $REMAINDER % 60)"
     MINS="$(expr $(expr $REMAINDER - $SECS) / 60)"
 
-    echo "Elapsed time (h:m:s): $HOURS:$MINS:$SECS"
+    RES=`printf 'Total processing time: %02d:%02d:%02d' $HOURS $MINS $SECS`
+    log DSPLY "$RES"
 }
 
 commando () {
@@ -1645,9 +1654,11 @@ listen_for_job () {
     if [ ! "$PERCENT" == "100" ]
     then
         echo
+	stop-ppss
         log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
         log DSPLY "Press ENTER to continue."
     else
+	stop-ppss
         log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
     fi
     cleanup
