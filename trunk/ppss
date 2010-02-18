@@ -1715,7 +1715,7 @@ show_status () {
     then
         ITEMS=`exec_cmd "ls -1 $SRC_DIR | wc -l"`  
     else
-        ITEMS=`exec_cmd "cat $PPSS_DIR/$INPUT_FILE | wc -l"`
+        ITEMS=`exec_cmd "cat $PPSS_HOME_DIR/$INPUT_FILE | wc -l"`
     fi
     
     PROCESSED=`exec_cmd "ls -1 $ITEM_LOCK_DIR | wc -l"` 2>&1 >> /dev/null
@@ -1752,7 +1752,7 @@ show_status () {
             STATUS="UNKNOWN"
             RES=0
         fi
-        let PROCESSED=$PROCESSED+$RES
+        let PROCESSED="$PROCESSED+$RES"
         LINE=`echo "$x $NODE $RES $STATUS" | awk '{ printf ("%-16s %-18s % 10s %10s\n",$1,$2,$3,$4) }'`
         log DSPLY "$LINE"
     done
