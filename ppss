@@ -25,7 +25,7 @@ trap 'kill_process' SIGINT
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.56b3"
+SCRIPT_VERSION="2.56b4"
 
 # The first argument to this script can be a mode.
 MODES="node start config stop pause continue deploy status erase kill"
@@ -48,6 +48,7 @@ fi
 CONFIG=""
 HOSTNAME="`hostname`"
 ARCH="`uname`"
+PPSS_HOME_DIR="ppss-home"
 
 PID="$$"
 GLOBAL_LOCK="$PPSS_DIR/PPSS-GLOBAL-LOCK-$PID"           # Global lock file used by local PPSS instance.
@@ -83,7 +84,6 @@ SSH_OPTS="-o BatchMode=yes -o ControlPath=$SSH_SOCKET \
                                         # Blowfish is faster but still secure. 
 SSH_MASTER_PID=""
 
-PPSS_HOME_DIR="ppss"
 ITEM_LOCK_DIR="$PPSS_DIR/PPSS_ITEM_LOCK_DIR"      # Remote directory on master used for item locking.
 PPSS_LOCAL_TMPDIR="$PPSS_DIR/PPSS_LOCAL_TMPDIR"   # Local directory on slave for local processing.
 PPSS_LOCAL_OUTPUT="$PPSS_DIR/PPSS_LOCAL_OUTPUT"   # Local directory on slave for local output.
@@ -274,14 +274,15 @@ kill_process () {
 
 exec_cmd () { 
 
-
     CMD="$1"
 
     if [ ! -z "$SSH_SERVER" ] 
     then
+        log DEBUG "REMOTE EXEC"
         ssh $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER $CMD
         return $?
     else
+        log DEBUG "LOCAL EXEC"
         eval "$CMD"
         return $?
     fi
@@ -666,10 +667,8 @@ init_vars () {
     does_file_exist "$REMOTE_OUTPUT_DIR"
     if [ ! "$?" == "0" ]
     then
-        log ERROR "Remote output dir $REMOTE_OUTPUT_DIR does not exist."
-        set_status STOPPED
-        cleanup
-        exit
+        log DEBUG "Remote output dir $REMOTE_OUTPUT_DIR does not exist."
+        exec_cmd "mkdir $REMOTE_OUTPUT_DIR"
     fi
 
     if [ ! -e "$PPSS_LOCAL_TMPDIR" ]
@@ -907,6 +906,10 @@ start_ppss_on_node () {
     NODE="$1"
     log DSPLY "Starting PPSS on node $NODE."
     ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
+    #
+    # TEMP REMOVE
+    #
+    ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 "touch test123" 
 }
 
 test_server () {
@@ -1735,12 +1738,13 @@ show_status () {
     PROCESSED=0
     for x in `cat $NODES_FILE`
     do
+        RES=0
         NODE=`get_status_of_node "$x" | awk '{ print $1 }'`
         if [ ! "$NODE" == "UNKNOWN" ]
         then
             STATUS=`get_status_of_node "$x" | awk '{ print $2 }'`
             RES=`exec_cmd "grep -i $NODE ~/$PPSS_HOME_DIR/$JOB_LOG_DIR/* 2>/dev/null | wc -l "`
-            if [ ! "$?" == "0" ]
+            if [ ! "$?" == "0" ] || [ -z "$RES" ]
             then
                 RES=0
             fi
