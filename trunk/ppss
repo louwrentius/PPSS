@@ -81,6 +81,10 @@ SSH_OPTS="-o BatchMode=yes -o ControlPath=$SSH_SOCKET \
                            -o ControlMaster=auto \
                            -o Cipher=blowfish \
                            -o ConnectTimeout=10 "
+
+SSH_OPTS_NOMP="-o BatchMode=yes -o GlobalKnownHostsFile=./known_hosts \
+                           -o Cipher=blowfish \
+                           -o ConnectTimeout=10 "
                                         # Blowfish is faster but still secure. 
 SSH_MASTER_PID=""
 
@@ -274,18 +278,29 @@ kill_process () {
 
 exec_cmd () { 
 
+    STATUS="0"
     CMD="$1"
+    NOMP="$2" # Disable multiplexing.
 
     if [ ! -z "$SSH_SERVER" ] 
     then
-        log DEBUG "REMOTE EXEC"
-        ssh $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER $CMD
-        return $?
+        if [ -z "$NOMP" ]
+        then
+            log DEBUG "REMOTE EXEC"
+            ssh $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER $CMD
+            STATUS=$?
+        elif [ "$NOMP" == "1" ]
+        then
+            log DEBUG "REMOTE EXEC NO MP"
+            ssh $SSH_OPTS_NOMP $SSH_KEY $USER@$SSH_SERVER $CMD
+            STATUS=$?
+        fi
     else
         log DEBUG "LOCAL EXEC"
         eval "$CMD"
-        return $?
+        STATUS=$?
     fi
+    return $STATUS
 }
 
 # this function makes remote or local checking of existence of items transparent.
@@ -906,10 +921,6 @@ start_ppss_on_node () {
     NODE="$1"
     log DSPLY "Starting PPSS on node $NODE."
     ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
-    #
-    # TEMP REMOVE
-    #
-    ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 "touch test123" 
 }
 
 test_server () {
@@ -1710,18 +1721,23 @@ show_status () {
     then
         SSH_KEY="-i $SSH_KEY"
     fi
-
     if [ -z "$INPUT_FILE" ]
     then
-        ITEMS=`exec_cmd "ls -1 $SRC_DIR | wc -l"`  
+        ITEMS=`exec_cmd "ls -1 $SRC_DIR  2>/dev/null | wc -l" 1`  
     else
-        ITEMS=`exec_cmd "cat $PPSS_HOME_DIR/$INPUT_FILE | wc -l"`
+        ITEMS=`exec_cmd "cat $PPSS_HOME_DIR/$INPUT_FILE 2>/dev/null | wc -l" 1`
     fi
-    
-    PROCESSED=`exec_cmd "ls -1 $ITEM_LOCK_DIR | wc -l"` 2>&1 >> /dev/null
-    TMP_STATUS=$((100 * $PROCESSED / $ITEMS))
 
-    log DSPLY "Status:\t\t$TMP_STATUS percent complete."
+    ITEMS=`echo $ITEMS | sed s/\ //g`
+    
+    if [ ! -z "$ITEMS" ] && [ ! "$ITEMS" == "0" ]
+    then
+        PROCESSED=`exec_cmd "ls -1 $ITEM_LOCK_DIR 2>/dev/null | wc -l" 1` 2>&1 >> /dev/null
+        TMP_STATUS=$((100 * $PROCESSED / $ITEMS))
+        log DSPLY "Status:\t\t$TMP_STATUS percent complete."
+    else
+        log DSPLY "Status: UNKNOWN - is PPSS deployed on nodes?"
+    fi
 
     if [ ! -z $NODES_FILE ]
     then
@@ -1743,7 +1759,7 @@ show_status () {
         if [ ! "$NODE" == "UNKNOWN" ]
         then
             STATUS=`get_status_of_node "$x" | awk '{ print $2 }'`
-            RES=`exec_cmd "grep -i $NODE ~/$PPSS_HOME_DIR/$JOB_LOG_DIR/* 2>/dev/null | wc -l "`
+            RES=`exec_cmd "grep -i $NODE ~/$PPSS_HOME_DIR/$JOB_LOG_DIR/* 2>/dev/null | wc -l " 1`
             if [ ! "$?" == "0" ] || [ -z "$RES" ]
             then
                 RES=0
@@ -1848,7 +1864,6 @@ main () {
                     LOGFILE=/dev/null
                     display_header
                     show_status
-                    cleanup
                     exit 0
                     ;;
         erase )
