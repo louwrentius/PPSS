@@ -25,10 +25,10 @@ trap 'kill_process' SIGINT
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.56b4"
+SCRIPT_VERSION="2.57b1"
 
 # The first argument to this script can be a mode.
-MODES="node start config stop pause continue deploy status erase kill"
+MODES="node start config stop pause continue deploy status erase kill ec2"
 for x in $MODES
 do
     if [ "$x" == "$1" ]
@@ -455,6 +455,32 @@ do
                         add_var_to_config MAX_DELAY "$MAX_DELAY"
                         shift 2
                         ;;
+	  --awskeypair|-P)
+	  		AWS_KEYPAIR="$2"
+			add_var_to_config AWS_KEYPAIR "$AWS_KEYPAIR"
+			shift 2
+			;;
+	  --AMI|-A)
+	  		AMI_ID="$2"
+			add_var_to_config AMI_ID "$AMI_ID"
+			shift 2
+			;;
+	  --type|-T)
+	  		INSTANCE_TYPE="$2"
+			add_var_to_config INSTANCE_TYPE "$INSTANCE_TYPE"
+			shift 2
+			;;
+
+	  --security|-G)
+	  		SECURITY_GROUP="$2"
+			add_var_to_config SECURITY_GROUP "$SECURITY_GROUP"
+			shift 2
+			;;
+	  --instances|-I)
+	  		NUM_NODES="$2"
+			add_var_to_config NUM_NODES "$NUM_NODES"
+			shift 2
+			;;
           --command|-c ) 
                         COMMAND="$2"
                         if [ "$MODE" == "config" ]
@@ -793,6 +819,34 @@ erase_ppss () {
     sleep 1
 }
 
+ec2_get_pending_nodes() {
+
+    RES="$(ec2-describe-instances | grep 'INSTANCE' | awk '{print $4}'| grep pending)"
+    echo "$RES"
+}
+
+ec2_launch_nodes() {
+    
+    ec2run $AMI_ID -n $NUM_NODES -t $INSTANCE_TYPE -k $AWS_KEYPAIR -g $SECURITY_GROUP  
+
+    #
+    # Loop until all nodes are started
+    #
+    STARTING="`ec2_get_pending_nodes`"
+    while [ ! -z "$STARTING" ]
+    do
+        sleep 10
+        STARTING="`ec2_get_pending_nodes`"
+        log DSPLY "$STARTING"
+    done
+    #
+    # Write all instances / nodes to the nodes file.
+    #
+    ec2-describe-instances | grep 'INSTANCE' | awk '{print $4}' | sed '/terminated/d' | sed '/pending/d' >> $NODES_FILE
+    NO_OF_NODES="`wc -l $NODES_FILE`"
+    log DSPLY "Number of nodes / instances: $NO_OF_NODES"
+}
+
 deploy () {
 
     NODE="$1"
@@ -894,6 +948,10 @@ deploy_ppss () {
         cleanup
         exit 1
     else
+	if [ -z "$EC2" ]
+	then
+		ec2_launch_nodes
+	fi
         for NODE in `cat $NODES_FILE` 
         do
             deploy "$NODE" &
@@ -1855,6 +1913,17 @@ main () {
                     LOGFILE=/dev/null
                     display_header
                     log DSPLY "Deploying PPSS on nodes."
+                    deploy_ppss
+                    wait
+                    cleanup
+                    exit 0
+                    ;;
+	ec2)
+                    EC2=true
+                    LOGFILE=/dev/null
+                    display_header
+                    log INFO "Deploying PPSS on EC2 nodes."
+                    ec2_launch_nodes
                     deploy_ppss
                     wait
                     cleanup
