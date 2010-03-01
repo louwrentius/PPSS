@@ -843,7 +843,7 @@ ec2_launch_nodes() {
     # Write all instances / nodes to the nodes file.
     #
     ec2-describe-instances | grep 'INSTANCE' | awk '{print $4}' | sed '/terminated/d' | sed '/pending/d' >> $NODES_FILE
-    NO_OF_NODES="`wc -l $NODES_FILE`"
+    NO_OF_NODES="`wc -l $NODES_FILE | awk '{ print $1 }'`"
     log DSPLY "Number of nodes / instances: $NO_OF_NODES"
 }
 
@@ -948,7 +948,7 @@ deploy_ppss () {
         cleanup
         exit 1
     else
-	if [ -z "$EC2" ]
+	if [ "$EC2" == "1" ]
 	then
 		ec2_launch_nodes
 	fi
@@ -1918,8 +1918,8 @@ main () {
                     cleanup
                     exit 0
                     ;;
-	ec2)
-                    EC2=true
+	        ec2)
+                    EC2=1
                     LOGFILE=/dev/null
                     display_header
                     log INFO "Deploying PPSS on EC2 nodes."
