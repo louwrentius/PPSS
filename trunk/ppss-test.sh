@@ -41,7 +41,7 @@ oneTimeSetUp () {
 
 testVersion () {
 
-    RES=`./$PPSS -v`
+    RES=`$PPSS -v`
     
     for x in $RES
     do
@@ -95,7 +95,7 @@ testRecursion () {
     createDirectoryWithSomeFiles
 
     #Execution of PPSS with recursion disabled.
-    RES=$( { ./$PPSS -d /tmp/$TMP_DIR -c 'ls -alh ' -r  >> /dev/null ; } 2>&1 )  
+    RES=$( { $PPSS -d /tmp/$TMP_DIR -c 'ls -alh ' -r  >> /dev/null ; } 2>&1 )  
 	assertEquals "PPSS did not execute properly." 0 "$?"
 
     NUMBER=`find /tmp/$TMP_DIR ! -type d | wc -l`
@@ -111,7 +111,7 @@ testSpacesInFilenames () {
 
     createDirectoryWithSomeFiles
     #Regular execution of PPSS
-    RES=$( { ./$PPSS -d /tmp/$TMP_DIR -c 'ls -alh ' >> /dev/null ; } 2>&1 )  
+    RES=$( { $PPSS -d /tmp/$TMP_DIR -c 'ls -alh ' >> /dev/null ; } 2>&1 )  
 	assertEquals "PPSS did not execute properly." 0 "$?"
 
     assertNull "PPSS retured some errors..." "$RES"
@@ -133,7 +133,7 @@ testSpacesInFilenames () {
 
 testSpecialCharacterHandling () {
 
-    RES=$( { ./$PPSS -f "$INPUTFILESPECIAL" -c 'echo ' >> /dev/null ; } 2>&1 )  
+    RES=$( { $PPSS -f "$INPUTFILESPECIAL" -c 'echo ' >> /dev/null ; } 2>&1 )  
 	assertEquals "PPSS did not execute properly." 0 "$?"
 
     assertNull "PPSS retured some errors..." "$RES"
@@ -158,28 +158,28 @@ testSkippingOfProcessedItems () {
 
     createDirectoryWithSomeFiles    
 
-    RES=$( { ./$PPSS -d /tmp/$TMP_DIR -c 'echo ' >> /dev/null ; } 2>&1 )
+    RES=$( { $PPSS -d /tmp/$TMP_DIR -c 'echo ' >> /dev/null ; } 2>&1 )
     assertEquals "PPSS did not execute properly." 0 "$?"
     assertNull "PPSS retured some errors..." "$RES"
 
-    RES=$( { ./$PPSS -d /tmp/$TMP_DIR -c 'echo ' >> /dev/null ; } 2>&1 )
+    RES=$( { $PPSS -d /tmp/$TMP_DIR -c 'echo ' >> /dev/null ; } 2>&1 )
     assertEquals "PPSS did not execute properly." 0 "$?"
     assertNull "PPSS retured some errors..." "$RES"
 
-    grep -i skip ./$PPSS_dir/* >> /dev/null 2>&1
+    grep -i skip ./$PPSS_DIR/* >> /dev/null 2>&1
     assertEquals "Skipping of items went wrong." 0 "$?"
 
     rename-ppss-dir $FUNCNAME-1
 
-    RES=$( { ./$PPSS -f $INPUTFILESPECIAL -c 'echo ' >> /dev/null ; } 2>&1 )
+    RES=$( { $PPSS -f $INPUTFILESPECIAL -c 'echo ' >> /dev/null ; } 2>&1 )
     assertEquals "PPSS did not execute properly." 0 "$?"
     assertNull "PPSS retured some errors..." "$RES"
 
-    RES=$( { ./$PPSS -f $INPUTFILESPECIAL -c 'echo ' >> /dev/null ; } 2>&1 )
+    RES=$( { $PPSS -f $INPUTFILESPECIAL -c 'echo ' >> /dev/null ; } 2>&1 )
     assertEquals "PPSS did not execute properly." 0 "$?"
     assertNull "PPSS retured some errors..." "$RES"
 
-    grep -i skip ./$PPSS_dir/* >> /dev/null 2>&1
+    grep -i skip ./$PPSS_DIR/* >> /dev/null 2>&1
     assertEquals "Skipping of items went wrong." 0 "$?"
 
     rm -rf "/tmp/$TMP_DIR"   
@@ -188,7 +188,7 @@ testSkippingOfProcessedItems () {
 
 testExistLogFiles () {
 
-	./$PPSS -f "$INPUTFILENORMAL" -c 'echo "$ITEM"' >> /dev/null
+	$PPSS -f "$INPUTFILENORMAL" -c 'echo "$ITEM"' >> /dev/null
 	assertEquals "PPSS did not execute properly." 0 "$?"
 
 	for x in $NORMALTESTFILES
@@ -205,11 +205,11 @@ getStatusOfJob () {
 
 	if [ "$EXPECTED" == "SUCCESS" ]
 	then
-		./$PPSS -f "$INPUTFILENORMAL" -c 'echo ' >> /dev/null
+		$PPSS -f "$INPUTFILENORMAL" -c 'echo ' >> /dev/null
         	assertEquals "PPSS did not execute properly." 0 "$?"
 	elif [ "$EXPECTED" == "FAILURE" ]
 	then
-		./$PPSS -f "$INPUTFILENORMAL" -c 'thiscommandfails ' >> /dev/null
+		$PPSS -f "$INPUTFILENORMAL" -c 'thiscommandfails ' >> /dev/null
         	assertEquals "PPSS did not execute properly." 0 "$?"
 	fi
 

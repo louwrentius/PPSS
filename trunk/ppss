@@ -267,7 +267,7 @@ showusage_long () {
     echo 
     echo -e "Running PPSS on a client as part of a cluster."
     echo 
-    echo -e "$0 -d /somedir -c 'cp "$ITEM" /some/destination' -s 10.0.0.50 -u ppss -t -k ppss-key.key"
+    echo -e "$0 -d /somedir -c 'cp "$ITEM" /some/destination' -m 10.0.0.50 -u ppss -t -k ppss-key.key"
     echo    
 }
 
@@ -792,12 +792,11 @@ check_status () {
 
     if [ ! "$ERROR" == "0" ]
     then
-        log INFO "$FUNCTION - $MESSAGE"
+        log DSPLY "$FUNCTION - $MESSAGE"
         set_status STOPPED 
         cleanup
         exit 1
     fi
-
 }
 
 erase_ppss () {
@@ -1224,10 +1223,8 @@ download_item () {
 
 upload_item () {
 
-
     ITEM="$1"
     ITEMDIR="$2"
-
 
     log DEBUG "Uploading item $ITEM."
     if [ "$SECURE_COPY" == "1" ]
@@ -1297,7 +1294,7 @@ get_all_items () {
         then
             if [ "$RECURSION" == "1" ]
             then
-                ITEMS=`exec_cmd "find $SRC_DIR ! -type d"`
+                ITEMS=`exec_cmd "find $SRC_DIR/ ! -type d"`
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             else
                 log DEBUG "Recursion is disabled."
@@ -1309,10 +1306,12 @@ get_all_items () {
             then
                 if [ "$RECURSION" == "1" ]
                 then
-                    ITEMS=`find "$SRC_DIR" ! -type d`
+                    ITEMS=`find "$SRC_DIR/" ! -type d`
+                    check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 else
                     log DEBUG "Recursion is disabled."
                     ITEMS=`ls -1 "$SRC_DIR"`
+                    check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 fi
             else
                 ITEMS=""
@@ -1932,6 +1931,7 @@ main () {
         status )
                     LOGFILE=/dev/null
                     display_header
+                    get_all_items
                     show_status
                     exit 0
                     ;;
