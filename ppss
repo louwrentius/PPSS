@@ -52,9 +52,9 @@ PPSS_HOME_DIR="ppss-home"
 
 PID="$$"
 GLOBAL_LOCK="$PPSS_DIR/PPSS-GLOBAL-LOCK-$PID"           # Global lock file used by local PPSS instance.
-PAUSE_SIGNAL="$PPSS_DIR/pause_signal"                   # Pause processing if this file is present.
+PAUSE_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/pause_signal"                   # Pause processing if this file is present.
 PAUSE_DELAY="60"                                          # Polling every 1 minutes by default.
-STOP_SIGNAL="$PPSS_DIR/stop_signal"                     # Stop processing if this file is present.
+STOP_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/stop_signal"                     # Stop processing if this file is present.
 ARRAY_POINTER_FILE="$PPSS_DIR/ppss-array-pointer-$PID"  # Pointer for keeping track of processed items.
 JOB_LOG_DIR="$PPSS_DIR/job_log"                         # Directory containing log files of processed items.
 LOGFILE="$PPSS_DIR/ppss-log-$PID.txt"                     # General PPSS log file. Contains lots of info.
@@ -91,7 +91,7 @@ SSH_MASTER_PID=""
 ITEM_LOCK_DIR="$PPSS_HOME_DIR/$PPSS_DIR/PPSS_ITEM_LOCK_DIR"      # Remote directory on master used for item locking.
 PPSS_LOCAL_TMPDIR="$PPSS_DIR/PPSS_LOCAL_TMPDIR"   # Local directory on slave for local processing.
 PPSS_LOCAL_OUTPUT="$PPSS_DIR/PPSS_LOCAL_OUTPUT"   # Local directory on slave for local output.
-TRANSFER_TO_SLAVE="0"                   # Transfer item to slave via (s)cp.
+DOWNLOAD_TO_NODE="0"                   # Transfer item to slave via (s)cp.
 SECURE_COPY="1"                         # If set, use SCP, Otherwise, use cp.
 REMOTE_OUTPUT_DIR=""                    # Remote directory to which output must be uploaded.
 SCRIPT=""                               # Custom user script that is executed by ppss.
@@ -151,7 +151,7 @@ showusage_normal () {
     echo -e "--delay | -D       Adds an initial random delay to the start of all parallel jobs to spread"
     echo -e "                   the load. The delay is only used at the start of all 'threads'."
     echo
-    echo -e "--no-recurse | -r  By default, recursion of directories is enabled when the -d option is "
+    echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
     echo -e "                   used. If this is not prefered, this can be disabled with this option "
     echo -e "                   Only files within the specified directory will be processed."
     echo 
@@ -217,7 +217,7 @@ showusage_long () {
     echo -e "--delay | -D       Adds an initial random delay to the start of all parallel jobs to spread"
     echo -e "                   the load. The delay is only used at the start of all 'threads'."
     echo 
-    echo -e "--no-recurse | -r  By default, recursion of directories is enabled when the -d option is "
+    echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
     echo -e "                   used. If this is not prefered, this can be disabled with this option "
     echo -e "                   Only files within the specified directory will be processed."
     echo 
@@ -244,8 +244,11 @@ showusage_long () {
     echo -e "                   execution through PPSS. Only used in the deploy mode."
     echo -e "                   This option should be specified if necessary when generating a config."
     echo
-    echo -e "--transfer | -t    This option specifies that an item will be downloaded by the node "
+    echo -e "--download | -D    This option specifies that an item will be downloaded by the node "
     echo -e "                   from the server or share to the local node for processing."
+    echo 
+    echo -e "--upload | -U      This option specifies that the output file will be copied back to"
+    echo -e "                   the server, the --outputdir option is mandaory."
     echo 
     echo -e "--no-scp | -b      Do not use scp for downloading items. Use cp instead. Assumes that a"
     echo -e "                   network file system (NFS/SMB) is mounted under a local mountpoint."
@@ -517,7 +520,7 @@ do
                         add_var_to_config LOGFILE "$LOGFILE"
                         shift 2
                         ;;
-       --no-recurse|-r )
+      --no-recursion|-r )
                         RECURSION="0"
                         add_var_to_config LOGFILE "$RECURSION"
                         shift 1
@@ -571,9 +574,19 @@ do
                         add_var_to_config SCRIPT "$SCRIPT"
                         shift 2
                         ;;
-        --transfer|-t )
-                        TRANSFER_TO_SLAVE="1"    
-                        add_var_to_config TRANSFER_TO_SLAVE "$TRANSFER_TO_SLAVE"
+        --download|-D )
+                        DOWNLOAD_TO_NODE="1"    
+                        add_var_to_config DOWNLOAD_TO_NODE "$DOWNLOAD_TO_NODE"
+                        shift 1
+                        ;;
+        --upload|-U )
+                        if [ -z "$REMOTE_OUTPUT_DIR" ]
+                        then
+                            echo "ERROR: no server-side output directory specified with -o"
+                            exit 1
+                        fi
+                        UPLOAD_TO_SERVER="1"    
+                        add_var_to_config UPLOAD_TO_SERVER "$UPLOAD_TO_SERVER"
                         shift 1
                         ;;
         --user|-u )
@@ -1225,7 +1238,7 @@ download_item () {
         VIRTUAL=1
     fi
 
-    if [ "$TRANSFER_TO_SLAVE" == "1" ] && [ "$VIRTUAL" == "0" ] 
+    if [ "$DOWNLOAD_TO_NODE" == "1" ] && [ "$VIRTUAL" == "0" ] 
     then
         log DEBUG "Transfering item $ITEM from source to local disk."
         if [ "$SECURE_COPY" == "1" ] && [ ! -z "$SSH_SERVER" ] 
@@ -1254,6 +1267,12 @@ download_item () {
 }
 
 upload_item () {
+
+    if [ ! "$UPLOAD_TO_SERVER" == "1" ]
+    then
+        log DEBUG "Upload to server is disabled."
+        return 1
+    fi
 
     OUTPUT_ITEM="$1"
     ITEMDIR="$2"
@@ -1588,7 +1607,7 @@ commando () {
     # Decide if an item must be transfered from server to the node.
     # or be processed in-place (NFS / SMB mount?)
     #
-    if [ "$TRANSFER_TO_SLAVE" == "0" ]
+    if [ "$DOWNLOAD_TO_NODE" == "0" ]
     then
         if [ -z "$SRC_DIR" ] && [ ! -z "$INPUT_FILE" ]
         then
@@ -1684,7 +1703,7 @@ commando () {
         # If part of a cluster, remove the downloaded item after 
         # it has been processed and uploaded as not to fill up disk space.
         #
-        if [ "$TRANSFER_TO_SLAVE" == "1" ] 
+        if [ "$DOWNLOAD_TO_NODE" == "1" ] 
         then
             if [ -e "$ITEM" ]
             then
@@ -1701,9 +1720,9 @@ commando () {
         escape_item "$DIR_NAME"
         ITEM_OUTPUT_DIR="$REMOTE_OUTPUT_DIR/$ITEM_ESCAPED"
 
-        if [ "$TRANSFER_TO_SLAVE" == "0" ]
+        if [ "$DOWNLOAD_TO_NODE" == "0" ]
         then
-            log DEBUG "File transfer is disabled."
+            log DEBUG "Download to node is disabled."
         else
             if [ "$DIR_NAME" == "." ]
             then
@@ -1894,7 +1913,12 @@ show_status () {
     fi
     if [ -z "$INPUT_FILE" ]
     then
-        ITEMS=`exec_cmd "ls -1 $SRC_DIR  2>/dev/null | wc -l" 1`  
+        if [ "$RECURSION" == "1" ]
+        then
+            ITEMS=`exec_cmd "find $SRC_DIR ! -type d 2>/dev/null | wc -l" 1`  
+        else
+            ITEMS=`exec_cmd "ls -1 $SRC_DIR  2>/dev/null | wc -l" 1`  
+        fi
     else
         ITEMS=`exec_cmd "cat $PPSS_HOME_DIR/$INPUT_FILE 2>/dev/null | wc -l" 1`
     fi
