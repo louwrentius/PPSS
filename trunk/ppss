@@ -1000,6 +1000,7 @@ test_server () {
         ssh -N -M $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER &
         SSH_MASTER_PID="$!"
         log DEBUG "SSH Master pid is $SSH_MASTER_PID"
+        log DSPLY "Connected to server: $SSH_SERVER"
     else
         log DEBUG "No remote server specified, assuming stand-alone mode."
     fi
@@ -1198,19 +1199,27 @@ download_item () {
 
     ITEM="$1"
     VIRTUAL="0"
+    ERR_STATE="0"
+
     if [ "$RECURSION" = "1" ]
     then
-        does_file_exist "$ITEM"
+        escape_item "$ITEM"
+        does_file_exist "$ITEM_ESCAPED"
+        ERR_STATE="$?"
         DOWNLOAD_ITEM="$ITEM"
+        LOCAL_DIR=`dirname "$DOWNLOAD_ITEM"`
     else
-        does_file_exist "$SRC_DIR/$ITEM"
+        escape_item "$ITEM"
+        does_file_exist "$SRC_DIR/$ITEM_ESCAPED"
+        ERR_STATE="$?"
         DOWNLOAD_ITEM="$SRC_DIR/$ITEM"
     fi
 
-    if [ "$?" == "0" ]
+    if [ "$ERR_STATE" == "0" ]
     then
         log DEBUG "$FUNCNAME Remote item $ITEM exists"
         VIRTUAL=0
+        
     else
         log DEBUG "$FUNCNAME Remote item $ITEM does NOT exist"
         VIRTUAL=1
@@ -1221,10 +1230,20 @@ download_item () {
         log DEBUG "Transfering item $ITEM from source to local disk."
         if [ "$SECURE_COPY" == "1" ] && [ ! -z "$SSH_SERVER" ] 
         then
-            escape_item "$DOWNLOAD_ITEM" 
-	        log DEBUG "$SSH_SERVER:$ITEM_ESCAPED $PPSS_LOCAL_TMPDIR"
-            scp -q $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER:"$ITEM_ESCAPED" $PPSS_LOCAL_TMPDIR
-            log DEBUG "Exit code of remote transfer is $?"
+            if [ "$RECURSION" == "1" ]
+            then
+                escape_item "$DOWNLOAD_ITEM" 
+                mkdir -p "$PPSS_LOCAL_TMPDIR/$LOCAL_DIR"
+                log DEBUG "$SSH_SERVER:$ITEM_ESCAPED $PPSS_LOCAL_TMPDIR/$LOCAL_DIR"
+                scp -q $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER:"$ITEM_ESCAPED" $PPSS_LOCAL_TMPDIR/"$LOCAL_DIR"
+                log DEBUG "Exit code of remote transfer is $?"
+            else
+                escape_item "$DOWNLOAD_ITEM" 
+                log DEBUG "$SSH_SERVER:$ITEM_ESCAPED $PPSS_LOCAL_TMPDIR"
+                scp -q $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER:"$ITEM_ESCAPED" $PPSS_LOCAL_TMPDIR 
+                log DEBUG "Exit code of remote transfer is $?"
+                
+            fi
         else
             cp "$ITEM" $PPSS_LOCAL_TMPDIR 
             log DEBUG "Exit code of local transfer is $?"
@@ -1242,15 +1261,20 @@ upload_item () {
     log DEBUG "Uploading item $OUTPUT_ITEM."
     if [ "$SECURE_COPY" == "1" ]
     then
-       
-        escape_item "$REMOTE_OUTPUT_DIR$ITEMDIR"
+        if [ "$RECURSION" = "1" ]
+        then 
+            escape_item "$REMOTE_OUTPUT_DIR$ITEMDIR"
+        else
+            escape_item "$REMOTE_OUTPUT_DIR"
+        fi
         DIR_ESCAPED="$ITEM_ESCAPED"
-
-        scp -q $SSH_OPTS $SSH_KEY "$OUTPUT_ITEM"/* $USER@$SSH_SERVER:"$DIR_ESCAPED" 
+        exec_cmd "mkdir -p $DIR_ESCAPED"
+        
+        scp -q $SSH_OPTS $SSH_KEY "$OUTPUT_ITEM"/* $USER@$SSH_SERVER:"$DIR_ESCAPED" 2>/dev/null
         ERROR="$?"
         if [ ! "$ERROR" == "0" ]
         then
-            log ERROR "Uploading of $OUTPUT_ITEM via SCP failed."
+            log ERROR "Uploading of $OUTPUT_ITEM_ESCAPED via SCP failed."
         else
             log DEBUG "Upload of item $OUTPUT_ITEM success" 
             rm -rf ./"$OUTPUT_ITEM"
@@ -1511,10 +1535,12 @@ commando () {
 
     if [ "$RECURSION" == "1" ]
     then
-        does_file_exist "$ITEM"
+        escape_item "$ITEM"
+        does_file_exist "$ITEM_ESCAPED"
         ERR_STATE="$?"
     else
-        does_file_exist "$SRC_DIR/$ITEM"
+        escape_item "$ITEM"
+        does_file_exist "$SRC_DIR/$ITEM_ESCAPED"
         ERR_STATE="$?"
     fi
 
@@ -1573,7 +1599,7 @@ commando () {
     else
         if [ "$RECURSION" == "1" ]
         then
-            ITEM="$PPSS_LOCAL_TMPDIR/$DIR_NAME/$ITEM_NO_PATH"
+            ITEM="$PPSS_LOCAL_TMPDIR/$ITEM"
         else
             ITEM="$PPSS_LOCAL_TMPDIR/$ITEM_NO_PATH"
         fi
@@ -1658,7 +1684,7 @@ commando () {
         # If part of a cluster, remove the downloaded item after 
         # it has been processed and uploaded as not to fill up disk space.
         #
-        if [ "$TRANSFER_TO_SLAVE" == "1" ]      
+        if [ "$TRANSFER_TO_SLAVE" == "1" ] && [ "1" == "2" ]
         then
             if [ -e "$ITEM" ]
             then
@@ -1679,7 +1705,6 @@ commando () {
         then
             log DEBUG "File transfer is disabled."
         else
-            exec_cmd "mkdir -p $ITEM_OUTPUT_DIR"
             if [ "$DIR_NAME" == "." ]
             then
                 DIR_NAME=""
@@ -1687,7 +1712,6 @@ commando () {
             upload_item "$OUTPUT_DIR" "$DIR_NAME"
         fi
 
-        
         elapsed "$BEFORE" "$AFTER" >> "$ITEM_LOG_FILE"
         echo -e "" >> "$ITEM_LOG_FILE"
 
@@ -1751,6 +1775,8 @@ listen_for_job () {
             # process as defined by $PID. All processes that have ever been
             # spawned, although disowned or backgrounded will be killed...
             #
+            # *** THIS MAY BE DEAD CODE ***
+            #
             PROCLIST=`ps a -o pid,pgid,ppid,command | grep [0-9] | grep $PID | grep -v -i grep`
             #echo "$PROCLIST" > proclist.txt
             oldIFS=$IFS # save the field separator
@@ -1774,10 +1800,6 @@ listen_for_job () {
             done
             IFS=$oldIFS
 
-            if [ ! -z "$SSH_MASTER_PID" ]
-            then
-                kill "$SSH_MASTER_PID" 
-            fi
             break
         else
             commando "$event" &
@@ -1804,16 +1826,24 @@ listen_for_job () {
         fi
     done
 
+    if [ ! -z "$SSH_MASTER_PID" ]
+    then
+        log DEBUG "SSH master PID is $SSH_MASTER_PID"
+        kill "$SSH_MASTER_PID" 
+    else
+        log DEBUG "SSH master PID is empty."
+    fi 
+
     set_status STOPPED
     log DEBUG "Listener stopped."
     if [ ! "$PERCENT" == "100" ]
     then
         echo
-	stop-ppss
+	    stop-ppss
         log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
         log DSPLY "Press ENTER to continue."
     else
-	stop-ppss
+	    stop-ppss
         log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
     fi
     cleanup
