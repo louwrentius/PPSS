@@ -5,6 +5,7 @@ VERSION="2.57b1"
 TMP_DIR="ppss"
 PPSS=./ppss
 PPSS_DIR=ppss_dir
+export PPSSDEBUG=1
 
 cleanup () {
 
