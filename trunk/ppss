@@ -1270,11 +1270,11 @@ upload_item () {
         DIR_ESCAPED="$ITEM_ESCAPED"
         exec_cmd "mkdir -p $DIR_ESCAPED"
         
-        scp -q $SSH_OPTS $SSH_KEY "$OUTPUT_ITEM"/* $USER@$SSH_SERVER:"$DIR_ESCAPED" 2>/dev/null
+        scp -q $SSH_OPTS $SSH_KEY "$OUTPUT_ITEM"/* $USER@$SSH_SERVER:"$DIR_ESCAPED"
         ERROR="$?"
         if [ ! "$ERROR" == "0" ]
         then
-            log ERROR "Uploading of $OUTPUT_ITEM_ESCAPED via SCP failed."
+            log ERROR "Uploading of $OUTPUT_ITEM via SCP failed."
         else
             log DEBUG "Upload of item $OUTPUT_ITEM success" 
             rm -rf ./"$OUTPUT_ITEM"
@@ -1684,7 +1684,7 @@ commando () {
         # If part of a cluster, remove the downloaded item after 
         # it has been processed and uploaded as not to fill up disk space.
         #
-        if [ "$TRANSFER_TO_SLAVE" == "1" ] && [ "1" == "2" ]
+        if [ "$TRANSFER_TO_SLAVE" == "1" ] 
         then
             if [ -e "$ITEM" ]
             then
