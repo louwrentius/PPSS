@@ -25,7 +25,7 @@ trap 'kill_process' SIGINT
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.57b1"
+SCRIPT_VERSION="2.60b1"
 
 # The first argument to this script can be a mode.
 MODES="node start config stop pause continue deploy status erase kill ec2"
@@ -830,7 +830,7 @@ erase_ppss () {
     then
         for NODE in `cat $NODES_FILE`
         do
-            log INFO "Erasing PPSS homedir $PPSS_DIR from node $NODE."
+            log DSPLY "Erasing PPSS homedir $PPSS_DIR from node $NODE."
             ssh -q $SSH_KEY $SSH_OPTS $USER@$NODE "rm -rf $PPSS_HOME_DIR"
         done
     else
@@ -1609,11 +1609,17 @@ commando () {
     #
     if [ "$DOWNLOAD_TO_NODE" == "0" ]
     then
-        if [ -z "$SRC_DIR" ] && [ ! -z "$INPUT_FILE" ]
+        if [ "$VIRTUAL" == "1" ]
         then
-            log DEBUG "Using item straight from the server, no copy."
+            log DEBUG "Item is virtual, thus not downloading."
         else
-            ITEM="$ITEM"
+            log DEBUG "Using item straight from the server, no copy."
+            if [ "$RECURSION" == "0" ]
+            then
+                ITEM="$SRC_DIR/$ITEM"
+            else
+                ITEM="$ITEM"
+            fi
         fi
     else
         if [ "$RECURSION" == "1" ]
@@ -1728,8 +1734,17 @@ commando () {
             then
                 DIR_NAME=""
             fi
-            upload_item "$OUTPUT_DIR" "$DIR_NAME"
         fi
+
+        #
+        # Upload the output file back to the server.
+        #
+
+        upload_item "$OUTPUT_DIR" "$DIR_NAME"
+
+        #
+        # Upload the log file to the server.
+        #
 
         elapsed "$BEFORE" "$AFTER" >> "$ITEM_LOG_FILE"
         echo -e "" >> "$ITEM_LOG_FILE"
