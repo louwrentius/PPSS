@@ -92,6 +92,7 @@ ITEM_LOCK_DIR="$PPSS_HOME_DIR/$PPSS_DIR/PPSS_ITEM_LOCK_DIR"      # Remote direct
 PPSS_LOCAL_TMPDIR="$PPSS_DIR/PPSS_LOCAL_TMPDIR"   # Local directory on slave for local processing.
 PPSS_LOCAL_OUTPUT="$PPSS_DIR/PPSS_LOCAL_OUTPUT"   # Local directory on slave for local output.
 DOWNLOAD_TO_NODE="0"                   # Transfer item to slave via (s)cp.
+UPLOAD_TO_SERVER="0"                   # Transfer output back to server via (s)cp.
 SECURE_COPY="1"                         # If set, use SCP, Otherwise, use cp.
 REMOTE_OUTPUT_DIR=""                    # Remote directory to which output must be uploaded.
 SCRIPT=""                               # Custom user script that is executed by ppss.
@@ -244,11 +245,11 @@ showusage_long () {
     echo -e "                   execution through PPSS. Only used in the deploy mode."
     echo -e "                   This option should be specified if necessary when generating a config."
     echo
-    echo -e "--download | -D    This option specifies that an item will be downloaded by the node "
+    echo -e "--download         This option specifies that an item will be downloaded by the node "
     echo -e "                   from the server or share to the local node for processing."
     echo 
-    echo -e "--upload | -U      This option specifies that the output file will be copied back to"
-    echo -e "                   the server, the --outputdir option is mandaory."
+    echo -e "--upload           This option specifies that the output file will be copied back to"
+    echo -e "                   the server, the --outputdir option is mandatory."
     echo 
     echo -e "--no-scp | -b      Do not use scp for downloading items. Use cp instead. Assumes that a"
     echo -e "                   network file system (NFS/SMB) is mounted under a local mountpoint."
@@ -258,7 +259,7 @@ showusage_long () {
     echo -e "                   directory specified with this option."
     echo 
     echo -e "--homedir | -H     Directory in which directory PPSS is installed on the node."
-    echo -e "                   Default is 'ppss'."
+    echo -e "                   Default is '$PPSS_HOME_DIR'."
     echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
@@ -268,9 +269,15 @@ showusage_long () {
     echo
     echo -e "$0 -C config.cfg"
     echo 
+    echo -e "Generating a configuration file. Wavs are converted to mp3. SCP is used for data transfer."
+    echo
+    echo -e "$0 config -C ppss-config.cfg -d /some/dir -o output --download --upload -K known_hosts \\"
+    echo -e "-k ppss-key.dsa -n nodes.txt -m 10.0.0.100 \\"
+    echo -e "-c 'lame --quiet \"\$ITEM\" -o \"\$OUTPUT_DIR/\$OUTPUT_FILE\".mp3' "
+    echo 
     echo -e "Running PPSS on a client as part of a cluster."
     echo 
-    echo -e "$0 -d /somedir -c 'cp "$ITEM" /some/destination' -m 10.0.0.50 -u ppss -t -k ppss-key.key"
+    echo -e "$0 node -d /somedir -c 'cp \"\$ITEM\" /some/destination' -m 10.0.0.50 -u ppss -k ppss-key.key"
     echo    
 }
 
@@ -574,12 +581,12 @@ do
                         add_var_to_config SCRIPT "$SCRIPT"
                         shift 2
                         ;;
-        --download|-D )
+        --download)
                         DOWNLOAD_TO_NODE="1"    
                         add_var_to_config DOWNLOAD_TO_NODE "$DOWNLOAD_TO_NODE"
                         shift 1
                         ;;
-        --upload|-U )
+        --upload)
                         if [ -z "$REMOTE_OUTPUT_DIR" ]
                         then
                             echo "ERROR: no server-side output directory specified with -o"
