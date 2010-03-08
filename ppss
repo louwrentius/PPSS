@@ -25,7 +25,7 @@ trap 'kill_process' SIGINT
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.60b1"
+SCRIPT_VERSION="2.60b2"
 
 # The first argument to this script can be a mode.
 MODES="node start config stop pause continue deploy status erase kill ec2"
@@ -185,6 +185,7 @@ showusage_long () {
     echo " config       Generate a config file based on the supplied option parameters."
     echo " deploy       Deploy PPSS and related files on the specified nodes."
     echo " erase        Erase PPSS and related files from the specified nodes."
+    echo " ec2          Start up Amazon EC2 instances and deploy PPSS on nodes."
     echo
     echo " start        Starting PPSS on nodes."
     echo " pause        Pausing PPSS on all nodes."
@@ -260,6 +261,20 @@ showusage_long () {
     echo 
     echo -e "--homedir | -H     Directory in which directory PPSS is installed on the node."
     echo -e "                   Default is '$PPSS_HOME_DIR'."
+    echo
+    echo -e "Amazon EC2 platform specific options:"
+    echo 
+    echo -e "--awskeypair | -P  The Amazon EC2 SSH keypair that new instances should use"
+    echo 
+    echo -e "--AMI    | -A      The Amazon Machine Image that should be used to create new running instances"
+    echo 
+    echo -e "--type   | -T      The type of EC2 instance that should be created."
+    echo -e "                   Example: c1.xlarge or m1.medium"
+    echo 
+    echo -e "--security   | -G  The security group that should be used for networking access"
+    echo 
+    echo -e "--instances  | -I  The number of instances that should be started"
+    echo 
     echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
@@ -343,7 +358,7 @@ check_for_interrupt () {
     then
         set_status "PAUZED"
         log INFO "PAUSE: sleeping for $PAUSE_DELAY SECONDS."
-        sleep 0.$PAUSE_DELAY
+        sleep $PAUSE_DELAY
         check_for_interrupt
     else
         set_status "RUNNING"
