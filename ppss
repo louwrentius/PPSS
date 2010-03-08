@@ -119,11 +119,12 @@ showusage_normal () {
     echo 
     echo "|P|P|S|S| $SCRIPT_NAME $SCRIPT_VERSION"
     echo 
-    echo "PPSS is a Bash shell script that executes commands in parallel on a set  "
-    echo "of items, such as files in a directory, or lines in a file."
+    echo "PPSS is a Bash shell script that executes commands in parallel on a set"
+    echo "of items, such as files in a directory, or lines in a file. The purpose" 
+    echo "of PPSS is to make it simple to benefit from multiple CPUs or CPU cores."
     echo 
-    echo "This short summary only discusses options for stand-alone mode. for a "
-    echo "complete listing of all options, run PPSS with the options --help"
+    echo "This short summary only discusses options for stand-alone mode. For a"
+    echo "full listing of all options, run PPSS with the options --help"
     echo
     echo "Usage $0 [ options ]"
     echo
@@ -142,7 +143,7 @@ showusage_normal () {
     echo -e "                   this option will result in PPSS reading the config file and start"
     echo -e "                   processing items based on the settings of this file."
     echo
-    echo -e "--enable-ht | -j   Enable hyperthreading. Is disabled by default."
+    echo -e "--disable-ht | -j  Disable hyper threading. Is enabled by default."
     echo 
     echo -e "--log | -l         Sets the name of the log file. The default is ppss-log.txt."
     echo
@@ -155,6 +156,8 @@ showusage_normal () {
     echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
     echo -e "                   used. If this is not prefered, this can be disabled with this option "
     echo -e "                   Only files within the specified directory will be processed."
+    echo 
+    echo -e "--help             Extended help, including options for distributed mode and Amazon EC2."
     echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
@@ -190,6 +193,7 @@ showusage_long () {
     echo " start        Starting PPSS on nodes."
     echo " pause        Pausing PPSS on all nodes."
     echo " stop         Stopping PPSS on all nodes."
+    echo " continue     Continuing PPSS on all nodes."
     echo " node         Running PPSS as a node, requires additional options."
     echo 
     echo "Options are:"
@@ -209,9 +213,9 @@ showusage_long () {
     echo -e "                   this option will result in PPSS reading the config file and start"
     echo -e "                   processing items based on the settings of this file."
     echo
-    echo -e "--enable-ht | -j   Enable hyperthreading. Is disabled by default."
+    echo -e "--disable-ht | -j  Disable hyper threading. Is enabled by default."
     echo 
-    echo -e "--log | -l         Sets the name of the log file. The default is ppss-log.txt."
+    echo -e "--log | -l         Sets the name of the log file. The default is ppss-log-<pid>.txt."
     echo
     echo -e "--processes | -p   Start the specified number of processes. Ignore the number of available"
     echo -e "                   CPUs."
@@ -220,17 +224,18 @@ showusage_long () {
     echo -e "                   the load. The delay is only used at the start of all 'threads'."
     echo 
     echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
-    echo -e "                   used. If this is not prefered, this can be disabled with this option "
+    echo -e "                   used. If this is not prefered, this can be disabled with this option."
     echo -e "                   Only files within the specified directory will be processed."
     echo 
     echo -e "The following options are used for distributed execution of PPSS."
     echo 
     echo -e "--master | -m      Specifies the SSH server that is used for communication between nodes."
     echo -e "                   Using SSH, file locks are created, informing other nodes that an item "
-    echo -e "                   is locked. Also, often items, such as files, reside on this host. SCP "
-    echo -e "                   is used to transfer files from this host to nodes for local procesing."
+    echo -e "                   is locked. If items are files that must be processed, they must reside" 
+    echo -e "                   on this host. SCP is used to transfer files from this host to nodes"
+    echo -e "                   for local procesing."
     echo
-    echo -e "--node | -n        File containig a list of nodes that act as PPSS clients. One IP / DNS "
+    echo -e "--node | -n        File containig a list of nodes that act as PPSS clients. One IP / DNS"
     echo -e "                   name per line."
     echo
     echo -e "--key | -k         The SSH key that a node uses to connect to the master."
@@ -239,41 +244,42 @@ showusage_long () {
     echo -e "                   hosts that already once connected to the server. See the file "
     echo -e "                   ~/.ssh/known_hosts or else, manualy connect once and check this file."
     echo
-    echo -e "--user | -u        The SSH user name that is used when logging in into the master SSH"
-    echo -e "                   server."
+    echo -e "--user | -u        The SSH user name that is used by the node when logging in into the"
+    echo -e "                   master SSH server."
     echo 
-    echo -e "--script | -S      Specifies the script/program that must be copied to the nodes for "
+    echo -e "--script | -S      Specifies the script/program that must be copied to the nodes for"
     echo -e "                   execution through PPSS. Only used in the deploy mode."
     echo -e "                   This option should be specified if necessary when generating a config."
     echo
-    echo -e "--download         This option specifies that an item will be downloaded by the node "
+    echo -e "--download         This option specifies that an item will be downloaded by the node"
     echo -e "                   from the server or share to the local node for processing."
     echo 
     echo -e "--upload           This option specifies that the output file will be copied back to"
     echo -e "                   the server, the --outputdir option is mandatory."
     echo 
     echo -e "--no-scp | -b      Do not use scp for downloading items. Use cp instead. Assumes that a"
-    echo -e "                   network file system (NFS/SMB) is mounted under a local mountpoint."
+    echo -e "                   network file system (NFS/SMB) is mounted under a local mount point."
     echo 
     echo -e "--outputdir | -o   Directory on server where processed files are put. If the result of "
     echo -e "                   encoding a wav file is an mp3 file, the mp3 file is put in the "
     echo -e "                   directory specified with this option."
     echo 
-    echo -e "--homedir | -H     Directory in which directory PPSS is installed on the node."
+    echo -e "--homedir | -H     Directory in which PPSS is installed on the node."
     echo -e "                   Default is '$PPSS_HOME_DIR'."
     echo
     echo -e "Amazon EC2 platform specific options:"
     echo 
-    echo -e "--awskeypair | -P  The Amazon EC2 SSH keypair that new instances should use"
+    echo -e "--awskeypair | -P  The Amazon EC2 SSH keypair that new instances should use."
     echo 
-    echo -e "--AMI    | -A      The Amazon Machine Image that should be used to create new running instances"
+    echo -e "--AMI    | -A      The Amazon Machine Image that should be used to create new"
+    echo -e "                   running instances."
     echo 
     echo -e "--type   | -T      The type of EC2 instance that should be created."
     echo -e "                   Example: c1.xlarge or m1.medium"
     echo 
-    echo -e "--security   | -G  The security group that should be used for networking access"
+    echo -e "--security   | -G  The security group that should be used for networking access."
     echo 
-    echo -e "--instances  | -I  The number of instances that should be started"
+    echo -e "--instances  | -I  The number of instances that should be started."
     echo 
     echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
