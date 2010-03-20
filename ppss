@@ -25,7 +25,7 @@ trap 'kill_process' SIGINT
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.60b2"
+SCRIPT_VERSION="2.60"
 
 # The first argument to this script can be a mode.
 MODES="node start config stop pause continue deploy status erase kill ec2"
@@ -110,8 +110,8 @@ showusage_short () {
     echo
     echo "Examples:"
     echo "                 $0 -d /dir/with/some/files -c 'gzip '" 
-    echo "                 $0 -d /dir/with/some/files -c 'gzip \"\$ITEM\"' -D 5" 
     echo "                 $0 -d /dir/with/some/files -c 'cp \"\$ITEM\" /tmp' -p 2" 
+    echo "                 $0 -f <file> -c 'wget -q -P /destination/directory \"\$ITEM\"' -p 10" 
 }
 
 showusage_normal () {
@@ -335,9 +335,11 @@ exec_cmd () {
     return $STATUS
 }
 
-# this function makes remote or local checking of existence of items transparent.
 does_file_exist () {
 
+    #
+    # this function makes remote or local checking of existence of items transparent.
+    #
     FILE="$1"
     `exec_cmd "ls -1 $FILE" >> /dev/null 2>&1`
     if [ "$?" == "0" ]
@@ -349,6 +351,10 @@ does_file_exist () {
 }
 
 check_for_interrupt () {
+
+    #
+    # PPSS can be interupted with a stop or pause command.
+    #
 
     does_file_exist "$STOP_SIGNAL"
     if [ "$?" == "0" ]
@@ -373,7 +379,7 @@ check_for_interrupt () {
 
 cleanup () {
 
-    #log DEBUG "$FUNCNAME - Cleaning up all temp files and processes."
+    log DEBUG "$FUNCNAME - Cleaning up all temp files and processes."
     
     if [ -e "$FIFO" ]
     then 
@@ -676,8 +682,10 @@ expand_str () {
 
 log () {
     
-    # Type 'INFO' is logged to the screen
+    #
+    # Type 'DSPLY ERROR and WARN' is logged to the screen
     # Any other log-type is only logged to the logfile.
+    #
 
     TYPE="$1"
     MESG="$2"
@@ -864,7 +872,6 @@ erase_ppss () {
     else
         log DSPLY "Aborting.."
     fi
-    sleep 1
 }
 
 ec2_get_pending_nodes() {
@@ -904,7 +911,6 @@ deploy () {
                            -o ControlMaster=auto \
                            -o Cipher=blowfish \
                            -o ConnectTimeout=5 "
-
     ERROR=0
     set_error () {
 
@@ -926,8 +932,6 @@ deploy () {
     SSH_PID=$!
 
     KEY=`echo $SSH_KEY | cut -d " " -f 2` 
-
-    sleep 1
 
     ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "cd ~ && mkdir $PPSS_HOME_DIR >> /dev/null 2>&1" 
     scp -q $SSH_OPTS_NODE $SSH_KEY $0 $USER@$NODE:~/$PPSS_HOME_DIR
@@ -1233,8 +1237,6 @@ escape_item () {
             sed s/\(/\\\\\\\\\\(/g | \
             sed s/\)/\\\\\\\\\\)/g ` 
 }
-            #sed s/\\\`/\\\\\\\\\\\\\\\`/g | \
-            #sed s/\\\//\\\\\\\\\\\\\\ /g | \
 
 download_item () {
 
@@ -1458,25 +1460,29 @@ get_item () {
 
     SIZE_OF_ARRAY="${#ARRAY[@]}"
 
+    #
     # Return error if the array is empty.
+    #
     if [ "$SIZE_OF_ARRAY" -le "0" ]
     then
         release_global_lock
         return 1
     fi
 
+    #
     # This variable is used to walk thtough all array items.
+    #
     ARRAY_POINTER=`cat $ARRAY_POINTER_FILE`
     
+    #
     # Check if all items have been processed.
+    #
     if [ "$ARRAY_POINTER" -ge "$SIZE_OF_ARRAY" ]
     then
         release_global_lock
-        #echo -en "\033[1A"
         return 1
     fi
 
-        # Select an item. 
     ITEM="${ARRAY[$ARRAY_POINTER]}" 
     if [ -z "$ITEM" ]
     then
@@ -1492,6 +1498,9 @@ get_item () {
         then
             log DEBUG "Item $ITEM is locked."
             release_global_lock
+            #
+            # Recursion, get_ttem calls itself, until all items are done.
+            #
             get_item
         else
             log DEBUG "Got lock on $ITEM, processing."
@@ -1504,12 +1513,11 @@ get_item () {
 
 start_single_worker () {
 
-        #
-        # This function sends an item to the fifo. This signals
-        # the listener process to execute a 'worker' on this
-        # item, using the 'commando' function.
-        # 
-
+    #
+    # This function sends an item to the fifo. This signals
+    # the listener process to execute a 'worker' on this
+    # item, using the 'commando' function.
+    # 
     get_item
     ERROR=$?
     if [ ! "$ERROR" == "0" ]
