@@ -1565,12 +1565,7 @@ start_single_worker () {
 
 stop-ppss () {
 
-    if [ "$ARCH" == "SunOS" ]
-    then
-        STOP_PPSS=`truss /usr/bin/date 2>&1 | grep ^time | awk '{ print $3 }'`
-    else
-        STOP_PPSS="$(date +%s)"
-    fi
+    STOP_PPSS=`get_time_in_seconds`
     elapsed "$START_PPSS" "$STOP_PPSS"
 }
 
