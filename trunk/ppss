@@ -25,7 +25,7 @@ trap 'kill_process' SIGINT
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.60"
+SCRIPT_VERSION="2.61"
 
 # The first argument to this script can be a mode.
 MODES="node start config stop pause continue deploy status erase kill ec2"
@@ -44,6 +44,21 @@ if [ -z "$PPSS_DIR" ]
 then
     PPSS_DIR="ppss_dir"
 fi
+
+get_time_in_seconds () {
+
+    if [ "$ARCH" == "SunOS" ]
+    then
+        #
+        # Dirty hack because this ancient operating system does not support +%s...
+        #
+        THE_TIME=`truss /usr/bin/date 2>&1 | grep ^time | awk '{ print $3 }'`
+    else
+        THE_TIME="$(date +%s)"
+    fi
+
+    echo "$THE_TIME"
+}
 
 CONFIG=""
 HOSTNAME="`hostname`"
@@ -69,7 +84,7 @@ PROCESSORS=""
 STOP_KEY="$RANDOM$RANDOM$RANDOM"                        # This is a signal to the listener to stop.
 KILL_KEY="$RANDOM$RANDOM$RANDOM"                        # This is a signal to stop immediately and kill
 RECURSION="1"                                           # all running processes.
-START_PPSS="$(date +%s)"
+START_PPSS=`get_time_in_seconds`
 STOP_PPSS=""
 
 SSH_SERVER=""                           # Remote server or 'master'.
@@ -1007,7 +1022,12 @@ deploy_ppss () {
         for NODE in `cat $NODES_FILE` 
         do
             deploy "$NODE" &
-            sleep 0.1
+            if [ "$ARCH" == "SunOS" ]
+            then
+                sleep 1
+            else
+                sleep 0.1
+            fi
             if [ "$NODE" == "$SSH_SERVER" ]
             then   
                 log DEBUG "SSH SERVER $SSH_SERVER is also a node."
@@ -1175,7 +1195,12 @@ random_delay () {
 
     NUMBER=$RANDOM
     let "NUMBER %= $ARGS"
-    sleep "0.$NUMBER"
+    if [ "$ARCH" == "SunOS" ]
+    then
+        sleep "$NUMBER"
+    else
+        sleep "0.$NUMBER"
+    fi
 }
 
 
@@ -1540,8 +1565,13 @@ start_single_worker () {
 
 stop-ppss () {
 
-   STOP_PPSS="$(date +%s)"
-   elapsed "$START_PPSS" "$STOP_PPSS"
+    if [ "$ARCH" == "SunOS" ]
+    then
+        STOP_PPSS=`truss /usr/bin/date 2>&1 | grep ^time | awk '{ print $3 }'`
+    else
+        STOP_PPSS="$(date +%s)"
+    fi
+    elapsed "$START_PPSS" "$STOP_PPSS"
 }
 
 
@@ -1717,7 +1747,7 @@ commando () {
         # The actual execution of the command as specified by
         # the -c option.
         #
-        BEFORE="$(date +%s)"
+        BEFORE=`get_time_in_seconds`
         TMP=`echo $COMMAND | grep -i '$ITEM'`
         if [ "$?" == "0"  ]
         then 
@@ -1729,7 +1759,7 @@ commando () {
             ERROR="$?"
             MYPID="$!"
         fi
-        AFTER="$(date +%s)"
+        AFTER=`get_time_in_seconds`
 
         echo -e "" >> "$ITEM_LOG_FILE"
 
