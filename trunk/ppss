@@ -25,7 +25,7 @@ trap 'kill_process' SIGINT
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.61"
+SCRIPT_VERSION="2.62"
 
 # The first argument to this script can be a mode.
 MODES="node start config stop pause continue deploy status erase kill ec2"
@@ -1442,7 +1442,7 @@ get_all_items () {
         then
             log DEBUG "Running as slave, input file has been pushed (hopefully)."
         fi
-        if [ ! -e "$INPUT_FILE" ]
+        if [ ! -e "$INPUT_FILE" ] && [ ! "$INPUT_FILE" == "-" ]
         then
             log ERROR "Input file $INPUT_FILE does not exist."
             set_status "ERROR"
@@ -1450,15 +1450,27 @@ get_all_items () {
             exit 1
         fi
     
-        exec 10<"$INPUT_FILE"
+        if [ ! "$INPUT_FILE" == "-" ]
+        then
+        
+            exec 10<"$INPUT_FILE"
 
-        while read LINE <&10
-        do
-            ARRAY[$count]=$LINE
-            ((count++))
-        done
+            while read LINE <&10
+            do
+                ARRAY[$count]=$LINE
+                ((count++))
+            done
 
-        exec 10>&-
+            exec 10>&-
+        else
+            log DEBUG "Reading from stdin.."
+            while read LINE
+            do
+                ARRAY[$count]=$LINE
+                ((count++))
+            done
+        fi
+
   
     fi
 
