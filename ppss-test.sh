@@ -136,12 +136,15 @@ testSpecialCharacterHandling () {
 
     RES=$( { $PPSS -f "$INPUTFILESPECIAL" -c 'echo ' >> /dev/null ; } 2>&1 )  
 	assertEquals "PPSS did not execute properly." 0 "$?"
-
     assertNull "PPSS retured some errors..." "$RES"
     if [ ! "$?" == "0" ]
     then
         echo "RES IS $RES"
     fi
+
+    RES=$( { cat "$INPUTFILESPECIAL" | $PPSS -f - -c 'echo ' >> /dev/null ; } 2>&1 )  
+	assertEquals "PPSS did not execute properly." 0 "$?"
+    assertNull "PPSS retured some errors..." "$RES"
 
     RES=`find ppss_dir/PPSS_LOCAL_OUTPUT | wc -l | sed 's/\ //g'`
     LINES=`wc -l "$INPUTFILESPECIAL" | awk '{ print $1 }'`

@@ -151,7 +151,8 @@ showusage_normal () {
     echo -e "                   are fed as an argument to the command that has been specified with -c." 
     echo 
     echo -e "--sourcefile | -f  Each single line of the supplied file will be fed as an item to the"
-    echo -e "                   command that has been specified with -c."
+    echo -e "                   command that has been specified with -c. Read input from stdin with"
+    echo -e "                   -f -"
     echo 
     echo -e "--config | -C      If the mode is config, a config file with the specified name will be"
     echo -e "                   generated based on all the options specified. In the other modes". 
@@ -221,7 +222,9 @@ showusage_long () {
     echo -e "                   are fed as an argument to the command that has been specified with -c." 
     echo 
     echo -e "--sourcefile | -f  Each single line of the supplied file will be fed as an item to the"
-    echo -e "                   command that has been specified with -c."
+    echo -e "                   command that has been specified with -c. Instead of a file, stdin can"
+    echo -e "                   be specified like \"-f -\" in order to 'pipe' items to ppss."
+    echo -e "                   Example: cat file | ppss -f - -c 'echo '"
     echo 
     echo -e "--config | -C      If the mode is config, a config file with the specified name will be"
     echo -e "                   generated based on all the options specified. In the other modes". 
