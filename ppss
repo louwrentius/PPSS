@@ -122,7 +122,7 @@ showusage_short () {
     echo
     echo "usage: $0 [ -d <sourcedir> | -f <sourcefile> ]  [ -c '<command> \"\$ITEM\"' ]"
     echo "                 [ -C <configfile> ] [ -j ] [ -l <logfile> ] [ -p <# jobs> ]"
-    echo "                 [ -D <delay> ] [ -h ] [ --help ] [ -r ] " 
+    echo "                 [ -q ] [ -D <delay> ] [ -h ] [ --help ] [ -r ] " 
     echo
     echo "Examples:"
     echo "                 $0 -d /dir/with/some/files -c 'gzip '" 
@@ -166,6 +166,8 @@ showusage_normal () {
     echo
     echo -e "--processes | -p   Start the specified number of processes. Ignore the number of available"
     echo -e "                   CPUs."
+    echo
+    echo -e "--quiet | -q       Shows no output except for a progress indication using percents."
     echo
     echo -e "--delay | -D       Adds an initial random delay to the start of all parallel jobs to spread"
     echo -e "                   the load. The delay is only used at the start of all 'threads'."
@@ -238,6 +240,8 @@ showusage_long () {
     echo
     echo -e "--processes | -p   Start the specified number of processes. Ignore the number of available"
     echo -e "                   CPUs."
+    echo
+    echo -e "--quiet | -q       Shows no output except for a progress indication using percents."
     echo
     echo -e "--delay | -D       Adds an initial random delay to the start of all parallel jobs to spread"
     echo -e "                   the load. The delay is only used at the start of all 'threads'."
