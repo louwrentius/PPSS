@@ -25,7 +25,7 @@ trap 'kill_process' SIGINT
 
 # Setting some vars. 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.62"
+SCRIPT_VERSION="2.63"
 
 # The first argument to this script can be a mode.
 MODES="node start config stop pause continue deploy status erase kill ec2"
@@ -73,6 +73,7 @@ STOP_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/stop_signal"                     # Stop pr
 ARRAY_POINTER_FILE="$PPSS_DIR/ppss-array-pointer-$PID"  # Pointer for keeping track of processed items.
 JOB_LOG_DIR="$PPSS_DIR/job_log"                         # Directory containing log files of processed items.
 LOGFILE="$PPSS_DIR/ppss-log-$PID.txt"                     # General PPSS log file. Contains lots of info.
+QUIET="0"
 STOP="0"                                                  # STOP job.
 MAX_DELAY="0"                                             # MAX DELAY between jobs.
 MAX_LOCK_DELAY="9"                                        #
@@ -641,6 +642,11 @@ do
                         add_var_to_config UPLOAD_TO_SERVER "$UPLOAD_TO_SERVER"
                         shift 1
                         ;;
+        --quiet|-q )    
+                        QUIET="1"
+                        add_var_to_config QUIET "$QUIET"
+                        shift 1
+                        ;;
         --user|-u )
                         USER="$2"
                         add_var_to_config USER "$USER"
@@ -727,11 +733,17 @@ log () {
         echo -e "$LOG_MSG" >> "$LOGFILE"
     fi
 
-    if [ "$TYPE" == "DSPLY" ] || [ "$TYPE" == "ERROR" ] || [ "$TYPE" == "WARN" ]
+    if [ "$TYPE" == "DSPLY" ] || [ "$TYPE" == "ERROR" ] || [ "$TYPE" == "WARN" ] && [ "$QUIET" == "0" ]
+    then
+        echo -e "$ECHO_MSG"
+    elif [ "$TYPE" == "ERROR" ] && [ "$QUIET" == "1" ]
     then
         echo -e "$ECHO_MSG"
     fi
-
+    if [ "$TYPE" == "PRCNT" ]
+    then
+        echo -en "\r$ECHO_MSG"
+    fi
 }
 
 
@@ -1598,7 +1610,7 @@ elapsed () {
     SECS="$(expr $REMAINDER % 60)"
     MINS="$(expr $(expr $REMAINDER - $SECS) / 60)"
 
-    RES=`printf 'Total processing time: %02d:%02d:%02d' $HOURS $MINS $SECS`
+    RES=`printf 'Total processing time (hh:mm:ss): %02d:%02d:%02d' $HOURS $MINS $SECS`
     log DSPLY "$RES"
 }
 
@@ -1863,16 +1875,19 @@ listen_for_job () {
             ((DIED++))
             if [ "$DIED" -ge "$MAX_NO_OF_RUNNING_JOBS" ] 
             then
-                #kill_process
                 break
             else
                 RES=$((MAX_NO_OF_RUNNING_JOBS-DIED))
-                if [ "$RES" == "1" ]
+                if [ "$RES" == "1" ] && [ "$QUIET" == "0" ]
                 then
-                    log DSPLY "$((MAX_NO_OF_RUNNING_JOBS-DIED)) job is remaining.       "
-                else
-                    log DSPLY "$((MAX_NO_OF_RUNNING_JOBS-DIED)) jobs are remaining."
-                    echo -en "\033[1A"
+                    log PRCNT "$((MAX_NO_OF_RUNNING_JOBS-DIED)) job is remaining.                \n"
+                elif [ "$QUIET" == "0" ]
+                then
+                    if [ "$DIED" == "1" ]
+                    then
+                        echo -en "\n"
+                    fi
+                    log PRCNT "$((MAX_NO_OF_RUNNING_JOBS-DIED)) jobs are remaining.              "
                 fi
             fi
         elif [ "$event" == "$KILL_KEY" ]
@@ -1909,14 +1924,12 @@ listen_for_job () {
                 fi
             done
             IFS=$oldIFS
-
             break
         else
             commando "$event" &
             MYPID="$!"
             disown
             PIDS="$PIDS $MYPID"
-            #log DEBUG "Event $event has pid $MYPID"
         fi
 
         get_global_lock
@@ -1924,14 +1937,23 @@ listen_for_job () {
         ARRAY_POINTER=`cat $ARRAY_POINTER_FILE`
         release_global_lock
         PERCENT=$((100 * $ARRAY_POINTER / $SIZE_OF_ARRAY ))
-        if [ "$DIED" == "0" ] && [ "$FINISHED" == "0" ]
+        if [ "$DIED" == "0" ] && [ "$FINISHED" == "0" ] 
         then
-            log DSPLY "Currently $PERCENT percent complete. Processed $ARRAY_POINTER of $SIZE_OF_ARRAY items." 
+            if [ "$QUIET" == "0" ]
+            then
+                log PRCNT "Currently $PERCENT percent complete. Processed $ARRAY_POINTER of $SIZE_OF_ARRAY items." 
+            else
+                echo -en "\r$PERCENT%"
+            fi
+
+
             if [ "$PERCENT" == "100" ]
             then
+                if [ "$QUIET" == "1" ]
+                then
+                    echo 
+                fi
                 FINISHED=1
-            else
-                echo -en "\033[1A"
             fi
         fi
     done
@@ -1955,6 +1977,10 @@ listen_for_job () {
     else
 	    stop-ppss
         log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
+    fi
+    if [ "$QUIET" == "1" ]
+    then
+        echo 
     fi
     cleanup
 }
