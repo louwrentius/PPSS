@@ -67,11 +67,16 @@ ARCH="`uname`"
 PPSS_HOME_DIR="ppss-home"
 
 PID="$$"
+if [ -z "$INPUT_LOCK" ]
+then
+    INPUT_LOCK="INPUT_LOCK"
+fi
 GLOBAL_LOCK="$PPSS_DIR/PPSS-GLOBAL-LOCK-$PID"           # Global lock file used by local PPSS instance.
 PAUSE_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/pause_signal"                   # Pause processing if this file is present.
 PAUSE_DELAY="60"                                          # Polling every 1 minutes by default.
 STOP_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/stop_signal"                     # Stop processing if this file is present.
 ARRAY_POINTER_FILE="$PPSS_DIR/ppss-array-pointer-$PID"  # Pointer for keeping track of processed items.
+ARRAY=""
 JOB_LOG_DIR="$PPSS_DIR/job_log"                         # Directory containing log files of processed items.
 LOGFILE="$PPSS_DIR/ppss-log-$PID.txt"                     # General PPSS log file. Contains lots of info.
 QUIET="0"
@@ -88,6 +93,7 @@ KILL_KEY="$RANDOM$RANDOM$RANDOM"                        # This is a signal to st
 RECURSION="1"                                           # all running processes.
 START_PPSS=`get_time_in_seconds`
 STOP_PPSS=""
+SIZE_OF_ARRAY=""
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -123,7 +129,7 @@ showusage_short () {
     echo
     echo "usage: $0 [ -d <sourcedir> | -f <sourcefile> ]  [ -c '<command> \"\$ITEM\"' ]"
     echo "                 [ -C <configfile> ] [ -j ] [ -l <logfile> ] [ -p <# jobs> ]"
-    echo "                 [ -q ] [ -D <delay> ] [ -h ] [ --help ] [ -r ] " 
+    echo "                 [ -q ] [ -D <delay> ] [ -h ] [ --help ] [ -r ] [ --daemon ]" 
     echo
     echo "Examples:"
     echo "                 $0 -d /dir/with/some/files -c 'gzip '" 
@@ -172,6 +178,9 @@ showusage_normal () {
     echo
     echo -e "--delay | -D       Adds an initial random delay to the start of all parallel jobs to spread"
     echo -e "                   the load. The delay is only used at the start of all 'threads'."
+    echo
+    echo -e "--daemon           Do not exit after items are professed, but keep looking for new items"
+    echo -e "                   and process them. Read the manual how to use this!"
     echo
     echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
     echo -e "                   used. If this is not prefered, this can be disabled with this option "
@@ -247,6 +256,9 @@ showusage_long () {
     echo -e "--delay | -D       Adds an initial random delay to the start of all parallel jobs to spread"
     echo -e "                   the load. The delay is only used at the start of all 'threads'."
     echo 
+    echo -e "--daemon           Do not exit after items are professed, but keep looking for new items"
+    echo -e "                   and process them. Read the manual how to use this!"
+    echo
     echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
     echo -e "                   used. If this is not prefered, this can be disabled with this option."
     echo -e "                   Only files within the specified directory will be processed."
@@ -516,6 +528,13 @@ do
                         MAX_DELAY="$2"
                         add_var_to_config MAX_DELAY "$MAX_DELAY"
                         shift 2
+                        ;;
+             --daemon)
+                        DAEMON="1"
+                        QUIET="1"
+                        add_var_to_config DAEMON "$DAEMON"
+                        add_var_to_config QUIET "$QUIET"
+                        shift 1
                         ;;
 	  --awskeypair|-P)
 	  		AWS_KEYPAIR="$2"
@@ -1418,7 +1437,41 @@ lock_item () {
     fi
 }
 
+get_input_lock () {
+
+    while true
+    do 
+        exec_cmd "mkdir -p $INPUT_LOCK"
+        if [ "$?" == "0" ]
+        then
+            log DEBUG "Input lock is obtained..."
+            break
+        else
+            log DEBUG "Input lock is present...sleeping.."
+            sleep 5
+        fi
+    done
+}
+
+release_input_lock () {
+    
+    exec_cmd "rm -rf $INPUT_LOCK"
+    if [ "$?" == "0" ]
+    then
+        log DEBUG "Input lock was released..."
+        return 0
+    else
+        log ERROR "Input lock was already gone...this should never happen..."
+        return 1
+    fi
+}
+
 get_all_items () {
+
+    if [ "$DAEMON" == "1" ]
+    then
+        get_input_lock
+    fi
 
     count=0
 
@@ -1494,6 +1547,11 @@ get_all_items () {
         fi
 
   
+    fi
+
+    if [ "$DAEMON" == "1" ]
+    then
+        release_input_lock
     fi
 
     SIZE_OF_ARRAY="${#ARRAY[@]}"
@@ -1624,6 +1682,10 @@ elapsed () {
 commando () {
     
     log DEBUG "-------------------------------------"
+    if [ "$DAEMON" == "1" ]
+    then
+        log INFO "Processing item: $1 in DAEMON MODE"
+    fi
 
     #
     # This function will start a chain reaction of events.
@@ -1882,7 +1944,20 @@ listen_for_job () {
             ((DIED++))
             if [ "$DIED" -ge "$MAX_NO_OF_RUNNING_JOBS" ] 
             then
-                break
+                if [ "$DAEMON" == "1" ] 
+                then
+                    #
+                    # In daemon mode, start all over again.
+                    #
+                    DIED=0
+                    export ARRAY=""
+                    get_all_items
+                    log DEBUG "Found $SIZE_OF_ARRAY items."
+                    start_all_workers
+                    sleep 10
+                else
+                    break
+                fi
             else
                 RES=$((MAX_NO_OF_RUNNING_JOBS-DIED))
                 if [ "$RES" == "1" ] && [ "$QUIET" == "0" ]
@@ -1906,8 +1981,6 @@ listen_for_job () {
             # This command kills all processes that are related to the master
             # process as defined by $PID. All processes that have ever been
             # spawned, although disowned or backgrounded will be killed...
-            #
-            # *** THIS MAY BE DEAD CODE ***
             #
             PROCLIST=`ps a -o pid,pgid,ppid,command | grep [0-9] | grep $PID | grep -v -i grep`
             #echo "$PROCLIST" > proclist.txt
@@ -1964,6 +2037,7 @@ listen_for_job () {
             fi
         fi
     done
+
 
     if [ ! -z "$SSH_MASTER_PID" ]
     then
