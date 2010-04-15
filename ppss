@@ -67,10 +67,6 @@ ARCH="`uname`"
 PPSS_HOME_DIR="ppss-home"
 
 PID="$$"
-if [ -z "$INPUT_LOCK" ]
-then
-    INPUT_LOCK="INPUT_LOCK"
-fi
 GLOBAL_LOCK="$PPSS_DIR/PPSS-GLOBAL-LOCK-$PID"           # Global lock file used by local PPSS instance.
 PAUSE_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/pause_signal"                   # Pause processing if this file is present.
 PAUSE_DELAY="60"                                          # Polling every 1 minutes by default.
@@ -776,6 +772,11 @@ init_vars () {
 
     create_working_directory
 
+    if [ "$DAEMON" == "1" ]
+    then
+        INPUT_LOCK="$SRC_DIR/INPUT_LOCK"
+    fi
+
     if [ "$ARCH" == "Darwin" ]
     then
         MIN_JOBS=4
@@ -1439,9 +1440,10 @@ lock_item () {
 
 get_input_lock () {
 
+
     while true
     do 
-        exec_cmd "mkdir -p $INPUT_LOCK"
+        exec_cmd "mkdir $INPUT_LOCK >> /dev/null 2>&1 " 
         if [ "$?" == "0" ]
         then
             log DEBUG "Input lock is obtained..."
