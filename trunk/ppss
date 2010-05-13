@@ -117,6 +117,7 @@ REMOTE_OUTPUT_DIR=""                    # Remote directory to which output must 
 SCRIPT=""                               # Custom user script that is executed by ppss.
 ITEM_ESCAPED=""
 NODE_STATUS="$PPSS_DIR/status.txt"
+DAEMON=0
 
 showusage_short () {
 
@@ -689,6 +690,14 @@ do
     esac
 done
 
+if [ "$DAEMON" == "1" ] && [ -z "$SRC_DIR" ]
+then
+    showusage_short
+    echo
+    echo "Daemon mode requires an argument to the -d option as a place to put the lock dir."
+    echo "Read the on-line manual for more information."
+    exit
+fi 
 
 display_header () {
 
@@ -708,7 +717,6 @@ create_working_directory () {
         mkdir -p "$PPSS_DIR"
     fi
 }
-
 
 expand_str () {
 
@@ -744,7 +752,7 @@ log () {
     LOG_MSG="$PREFIX $MESG"
     ECHO_MSG="$PREFIX_SMALL $MESG"
 
-    if [ ! -z "$PPSSDEBUG" ] && [ ! "$PPSSDEBUG" == "0" ]
+    if [ ! -z "$PPSS_DEBUG" ] && [ ! "$PPSS_DEBUG" == "0" ]
     then
         echo -e "$LOG_MSG" >> "$LOGFILE"
 
@@ -2024,10 +2032,10 @@ listen_for_job () {
             if [ "$QUIET" == "0" ]
             then
                 log PRCNT "Currently $PERCENT percent complete. Processed $ARRAY_POINTER of $SIZE_OF_ARRAY items." 
-            else
+            elif [ "$DAEMON" == "0" ]
+            then
                 echo -en "\r$PERCENT%"
             fi
-
 
             if [ "$PERCENT" == "100" ]
             then
@@ -2073,11 +2081,14 @@ start_all_workers () {
 
     if [ "$MAX_NO_OF_RUNNING_JOBS" == "1" ]
     then
-        log DSPLY "Starting $MAX_NO_OF_RUNNING_JOBS single worker."
+        log DSPLY "Starting one (1) single worker."
     else
         log DSPLY "Starting $MAX_NO_OF_RUNNING_JOBS parallel workers."
     fi
-    log DSPLY "---------------------------------------------------------"
+    if [ "$DAEMON" == "0" ]
+    then
+        log DSPLY "---------------------------------------------------------"
+    fi
 
     i=0
     while [ "$i" -lt "$MAX_NO_OF_RUNNING_JOBS" ]
