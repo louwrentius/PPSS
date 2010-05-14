@@ -1345,6 +1345,8 @@ escape_item () {
             sed s/\\|/\\\\\\\\\\\\\\|/g | \
             sed s/\&/\\\\\\\\\\\\\\&/g | \
             sed s/\;/\\\\\\\\\\\\\\;/g | \
+            sed s/\>/\\\\\\\\\\>/g | \
+            sed s/\</\\\\\\\\\\</g | \
             sed s/\(/\\\\\\\\\\(/g | \
             sed s/\)/\\\\\\\\\\)/g ` 
 }
@@ -1628,6 +1630,7 @@ get_item () {
     fi
 
     ITEM="${ARRAY[$ARRAY_POINTER]}" 
+
     if [ -z "$ITEM" ]
     then
         ((ARRAY_POINTER++))
@@ -1707,7 +1710,6 @@ elapsed () {
 }
 
 commando () {
-    
     log DEBUG "-------------------------------------"
     if [ "$DAEMON" == "1" ]
     then
@@ -1736,6 +1738,7 @@ commando () {
     #
     ITEM="$1"
 
+
     if [ "$RECURSION" == "1" ]
     then
         escape_item "$ITEM"
@@ -1753,6 +1756,7 @@ commando () {
     # Therefore, the output directory must reflect the original directory
     # structure. If recursion is not used, this is not necessary.
     #
+
     
     if [ "$ERR_STATE" == "0" ]
     then
@@ -1813,6 +1817,7 @@ commando () {
             ITEM="$PPSS_LOCAL_TMPDIR/$ITEM_NO_PATH"
         fi
     fi
+    
 
     #
     # Create the log file containing the output of the command.
