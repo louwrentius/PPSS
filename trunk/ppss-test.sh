@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DEBUG="$1"
-VERSION="2.63"
+VERSION="2.65"
 TMP_DIR="ppss"
 PPSS=./ppss
 PPSS_DIR=ppss_dir
@@ -170,8 +170,8 @@ testSkippingOfProcessedItems () {
     assertEquals "PPSS did not execute properly." 0 "$?"
     assertNull "PPSS retured some errors..." "$RES"
 
-    grep -i skip ./$PPSS_DIR/* >> /dev/null 2>&1
-    assertEquals "Skipping of items went wrong." 0 "$?"
+    RES=`grep -c -i locked ./$PPSS_DIR/ppss-log* | tail -n 1 | cut -d ":" -f 2`
+    assertEquals "Skipping of items went wrong." 2 "$RES"
 
     rename-ppss-dir $FUNCNAME-1
 
@@ -183,8 +183,8 @@ testSkippingOfProcessedItems () {
     assertEquals "PPSS did not execute properly." 0 "$?"
     assertNull "PPSS retured some errors..." "$RES"
 
-    grep -i skip ./$PPSS_DIR/* >> /dev/null 2>&1
-    assertEquals "Skipping of items went wrong." 0 "$?"
+    RES=`grep -c -i locked ./$PPSS_DIR/ppss-log* | tail -n 1 | cut -d ":" -f 2`
+    assertEquals "Skipping of items went wrong." 8 "$RES"
 
     rm -rf "/tmp/$TMP_DIR"   
     rename-ppss-dir $FUNCNAME-2
