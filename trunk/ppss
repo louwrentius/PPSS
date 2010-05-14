@@ -71,8 +71,6 @@ GLOBAL_LOCK="$PPSS_DIR/PPSS-GLOBAL-LOCK-$PID"           # Global lock file used 
 PAUSE_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/pause_signal"                   # Pause processing if this file is present.
 PAUSE_DELAY="60"                                          # Polling every 1 minutes by default.
 STOP_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/stop_signal"                     # Stop processing if this file is present.
-ARRAY_POINTER_FILE="$PPSS_DIR/ppss-array-pointer-$PID"  # Pointer for keeping track of processed items.
-ARRAY=""
 GLOBAL_COUNTER=""
 GLOBAL_COUNTER_FILE="$PPSS_DIR/ppss-input-counter-$PID"
 LOCAL_INPUT_FILE="$PPSS_DIR/INPUT_FILE-$PID"
@@ -92,7 +90,7 @@ KILL_KEY="$RANDOM$RANDOM$RANDOM"                        # This is a signal to st
 RECURSION="1"                                           # all running processes.
 START_PPSS=`get_time_in_seconds`
 STOP_PPSS=""
-SIZE_OF_ARRAY=""
+SIZE_OF_INPUT=""
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -1603,9 +1601,8 @@ get_item () {
     get_global_lock
 
     SIZE_OF_INPUT=$(wc -l "$LOCAL_INPUT_FILE" | awk '{ print $1 }')
-    log DEBUG "sizeofinput $SIZE_OF_INPUT"
     #
-    # Return error if the array is empty.
+    # Return error if the list is empty.
     #
     if [ "$SIZE_OF_INPUT" -le "0" ] 
     then
@@ -1614,10 +1611,9 @@ get_item () {
     fi
 
     #
-    # This variable is used to walk thtough all array items.
+    # This variable is used to walk thtough all input file items.
     #
     GLOBAL_COUNTER=$(cat $GLOBAL_COUNTER_FILE)
-    log DEBUG "globalcounter $GLOBAL_COUNTER"   
     
     #
     # Check if all items have been processed.
@@ -1629,7 +1625,6 @@ get_item () {
     fi
 
     ITEM="$(sed -n $GLOBAL_COUNTER\p $LOCAL_INPUT_FILE)"
-    log DEBUG "item dus is $ITEM"
 
     if [ -z "$ITEM" ]
     then
@@ -1977,9 +1972,8 @@ listen_for_job () {
                     # In daemon mode, start all over again.
                     #
                     DIED=0
-                    export ARRAY=""
                     get_all_items
-                    log DEBUG "Found $SIZE_OF_ARRAY items."
+                    log DEBUG "Found $SIZE_OF_INPUT items."
                     start_all_workers
                     sleep 10
                 else
