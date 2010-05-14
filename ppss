@@ -94,7 +94,7 @@ SIZE_OF_ARRAY=""
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
 SSH_KNOWN_HOSTS=""
-SSH_SOCKET="/tmp/ppss_ssh_socket"          # Multiplex multiple SSH connections over 1 master.
+SSH_SOCKET="/tmp/ppss_ssh_socket-$$"          # Multiplex multiple SSH connections over 1 master.
 SSH_OPTS="-o BatchMode=yes -o ControlPath=$SSH_SOCKET \
                            -o GlobalKnownHostsFile=./known_hosts \
                            -o ControlMaster=auto \
@@ -107,7 +107,7 @@ SSH_OPTS_NOMP="-o BatchMode=yes -o GlobalKnownHostsFile=./known_hosts \
                                         # Blowfish is faster but still secure. 
 SSH_MASTER_PID=""
 
-ITEM_LOCK_DIR="$PPSS_HOME_DIR/$PPSS_DIR/PPSS_ITEM_LOCK_DIR"      # Remote directory on master used for item locking.
+ITEM_LOCK_DIR="$PPSS_DIR/PPSS_ITEM_LOCK_DIR"      # Remote directory on master used for item locking.
 PPSS_LOCAL_TMPDIR="$PPSS_DIR/PPSS_LOCAL_TMPDIR"   # Local directory on slave for local processing.
 PPSS_LOCAL_OUTPUT="$PPSS_DIR/PPSS_LOCAL_OUTPUT"   # Local directory on slave for local output.
 DOWNLOAD_TO_NODE="0"                   # Transfer item to slave via (s)cp.
@@ -122,7 +122,7 @@ DAEMON=0
 case $ARCH in
     "Darwin")  MD5=md5 ;;
     "FreeBSD") MD5=md5 ;;
-    "SunOS")   MD5="diget -a md5" ;; 
+    "SunOS")   MD5="digest -a md5" ;; 
     "Linux")   MD5=md5sum ;;
 esac
 
@@ -313,6 +313,8 @@ showusage_long () {
     echo 
     echo -e "--homedir | -H     Directory in which PPSS is installed on the node."
     echo -e "                   Default is '$PPSS_HOME_DIR'."
+    echo
+    echo -e "--script | -S      Script to run on the node. PPSS must copy this script to the node."
     echo
     echo -e "Amazon EC2 platform specific options:"
     echo 
@@ -752,7 +754,6 @@ log () {
     # Type 'DSPLY ERROR and WARN' is logged to the screen
     # Any other log-type is only logged to the logfile.
     #
-
     TYPE="$1"
     MESG="$2"
     TYPE_LENGTH=5 
@@ -797,8 +798,6 @@ init_vars () {
     then
         echo "ERROR - PPSS requires $MD5. It may not be within the path or installed."
     fi 
-
-    create_working_directory
 
     if [ "$DAEMON" == "1" ]
     then
@@ -878,17 +877,19 @@ init_vars () {
         does_file_exist "$PPSS_HOME_DIR/$JOB_LOG_DIR"
         if [ ! "$?" == "0" ]  
         then
-            log DEBUG "Remote Job log directory $JOB_lOG_DIR does not exist. Creating."
+            log DEBUG "Remote Job log directory $PPSS_HOME_DIR/$JOB_lOG_DIR does not exist. Creating."
             exec_cmd "mkdir $PPSS_HOME_DIR/$JOB_LOG_DIR"
         fi
-    elif [ ! -e "$JOB_LOG_DIR" ]
+    fi
+
+    if [ ! -e "$JOB_LOG_DIR" ]
     then
         mkdir -p "$JOB_LOG_DIR"
     fi
 
-    if [ -z "$SSH_SERVER" ]
+    if [ ! -z "$SSH_SERVER" ]
     then
-        ITEM_LOCK_DIR="$PPSS_DIR/ITEM_LOCK_DIR"
+        ITEM_LOCK_DIR="$PPSS_HOME_DIR/$ITEM_LOCK_DIR"
     fi
     
     does_file_exist "$ITEM_LOCK_DIR"
@@ -950,7 +951,7 @@ check_status () {
     if [ ! "$ERROR" == "0" ]
     then
         log DSPLY "$FUNCTION - $MESSAGE"
-        set_status STOPPED 
+        set_status ERROR 
         cleanup
         exit 1
     fi
@@ -1573,8 +1574,6 @@ get_all_items () {
                 ((count++))
             done
         fi
-
-  
     fi
 
     if [ "$DAEMON" == "1" ]
@@ -2150,7 +2149,7 @@ show_status () {
     
     if [ ! -z "$ITEMS" ] && [ ! "$ITEMS" == "0" ]
     then
-        PROCESSED=`exec_cmd "ls -1 $ITEM_LOCK_DIR 2>/dev/null | wc -l" 1` 2>&1 >> /dev/null
+        PROCESSED=`exec_cmd "ls -1 $PPSS_HOME_DIR/$ITEM_LOCK_DIR 2>/dev/null | wc -l" 1` 2>&1 >> /dev/null
         TMP_STATUS=$((100 * $PROCESSED / $ITEMS))
         log DSPLY "Status:\t\t$TMP_STATUS percent complete."
     else
@@ -2201,6 +2200,7 @@ main () {
     
     case $MODE in
               node )
+                    create_working_directory
                     test_server
                     init_vars
                     get_all_items
@@ -2315,6 +2315,7 @@ main () {
                     ;;
 
         * )
+                    create_working_directory
                     init_vars
                     get_all_items
                     listen_for_job "$MAX_NO_OF_RUNNING_JOBS" & 2>&1 >> /dev/null
