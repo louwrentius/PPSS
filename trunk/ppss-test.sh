@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DEBUG="$1"
-VERSION="2.65"
+VERSION="2.70"
 TMP_DIR="ppss"
 PPSS=./ppss
 PPSS_DIR=ppss_dir
