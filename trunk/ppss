@@ -1514,12 +1514,12 @@ get_all_items () {
             if [ "$RECURSION" == "1" ]
             then
                 #ITEMS=`exec_cmd "find $SRC_DIR/ ! -type d"`
-                `exec_cmd "find $SRC_DIR/ ! -type d"` >> "$LOCAL_INPUT_FILE"
+                `exec_cmd "find $SRC_DIR/ ! -type d" > "$LOCAL_INPUT_FILE"`
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             else
                 log DEBUG "Recursion is disabled."
                 #ITEMS=`exec_cmd "ls -1 $SRC_DIR"`
-                `exec_cmd "ls -1 $SRC_DIR"` >> "$LOCAL_INPUT_FILE"
+                `exec_cmd "ls -1 $SRC_DIR" > "$LOCAL_INPUT_FILE"`
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             fi
         else 
@@ -2142,7 +2142,7 @@ show_status () {
             ITEMS=`exec_cmd "ls -1 $SRC_DIR  2>/dev/null | wc -l" 1`  
         fi
     else
-        ITEMS=`exec_cmd "cat $PPSS_HOME_DIR/$INPUT_FILE 2>/dev/null | wc -l" 1`
+        ITEMS=`exec_cmd "cat $PPSS_HOME_DIR/$LOCAL_INPUT_FILE 2>/dev/null | wc -l" 1`
     fi
 
     ITEMS=`echo $ITEMS | sed s/\ //g`
