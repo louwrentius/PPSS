@@ -2,20 +2,26 @@
 
 DEBUG="$1"
 VERSION="2.70"
-TMP_DIR="ppss"
+TMP_DIR="/tmp/ppss"
 PPSS=./ppss
 PPSS_DIR=ppss_dir
-export PPSSDEBUG=1
+export PPSS_DEBUG=1
+HOST_ARCH=`uname`
+. "$PPSS"
 
 cleanup () {
 
-    for x in $REMOVEFILES
-    do
-        if [ -e ./$x ]
+        for x in $REMOVEFILES
+        do
+            if [ -e ./$x ]
+            then
+                rm -r ./$x
+            fi
+        done
+        if [ ! -z "$TMP_DIR" ]
         then
-            rm -r ./$x
+            rm -rf "/$TMP_DIR"   
         fi
-    done
 }
 
 parseJobStatus () {
@@ -25,7 +31,12 @@ parseJobStatus () {
     RES=`grep "Status:" "$JOBLOG/$TMP_FILE"`
     STATUS=`echo "$RES" | awk '{ print $2 }'`
     echo "$STATUS"
+}
 
+get_contents_of_input_file () {
+
+    RES=`cat $PPSS_DIR/INPUT_FILE-$$ | wc -l | awk '{ print $1 }'`
+    echo "$RES"
 }
 
 oneTimeSetUp () {
@@ -34,24 +45,19 @@ oneTimeSetUp () {
 	INPUTFILENORMAL=test-normal.input
     INPUTFILESPECIAL=test-special.input
     LOCALOUTPUT=ppss_dir/PPSS_LOCAL_OUTPUT
-
 	REMOVEFILES="$PPSS_DIR test-ppss-*"
+
+    if [ ! -e "$TMP_DIR" ]
+    then
+        mkdir "$TMP_DIR"
+    fi
 
     cleanup
 }
 
 testVersion () {
 
-    RES=`$PPSS -v`
-    
-    for x in $RES
-    do
-        echo "$x" | grep [0-9] >> /dev/null
-        if [ "$?" == "0" ]
-        then
-            assertEquals "Version mismatch!" "$VERSION" "$x"
-        fi
-    done
+    assertEquals "Version mismatch!" "$VERSION" "$SCRIPT_VERSION"
 }
 
 rename-ppss-dir () {
@@ -70,174 +76,71 @@ oneTimeTearDown () {
 	then
         cleanup 
     fi
+
 }
 
 createDirectoryWithSomeFiles () {
 
-    A="File with Spaces"
-    B="File\With\Slashes"
-    c="symnlink1"
-    d="symnlink2"
 
-    TMP_FILE="/tmp/$TMP_DIR"
-    if [ ! -e "$TMP_FILE" ]
-    then
-        mkdir "$TMP_FILE"
-    fi
+    ROOT_DIR=$TMP_DIR/root
+    CHILD_1=$ROOT_DIR/child_1
+    CHILD_2=$ROOT_DIR/child_2
 
-    touch "$A"
-    touch "$B"
-    ln -s /etc/resolve.conf "$TMP_FILE"/
-    ln -s /etc/hosts "$TMP_FILE"/
+    mkdir -p "$ROOT_DIR" 
+    mkdir -p "$CHILD_1"
+    mkdir -p "$CHILD_2"
+
+    for x in {1..10}
+    do
+        touch "$ROOT_DIR/file-$x"
+        touch "$CHILD_1/file-$x"
+        touch "$CHILD_2/file-$x"
+    done
+
+    ln -s /etc/resolve.conf "$ROOT_DIR" 2> /dev/null
+    ln -s /etc/hosts "$ROOT_DIR" 2> /dev/null
+}
+
+testMD5 () {
+
+    ARCH=Darwin
+    set_md5
+    assertEquals "MD5 executable not set properly - $MD5" "$MD5" "md5" 
+    ARCH=Linux
+    set_md5
+    assertEquals "MD5 executable not set properly - $MD5" "$MD5" "md5sum" 
+    ARCH=$HOST_ARCH
+}
+
+init_get_all_items () {
+
+    RECURSION="$1"
+    createDirectoryWithSomeFiles
+    create_working_directory
+    init_vars > /dev/null 2>&1
+    export SRC_DIR=$TMP_DIR/root
+    get_all_items
+    RES=`get_contents_of_input_file`
 }
 
 testRecursion () {
 
-    createDirectoryWithSomeFiles
+    init_get_all_items 1
 
-    #Execution of PPSS with recursion disabled.
-    RES=$( { $PPSS -d /tmp/$TMP_DIR -c 'ls -alh ' -r  >> /dev/null ; } 2>&1 )  
-	assertEquals "PPSS did not execute properly." 0 "$?"
-
-    NUMBER=`find /tmp/$TMP_DIR ! -type d | wc -l`
-    LOGS=`ls -1 $JOBLOG/* | wc -l`
-    assertEquals "Did not find equal files and joblogs $TMP_FILE" "$NUMBER" "$LOGS" 
-
-    rm -rf "/tmp/$TMP_DIR"   
-    rename-ppss-dir $FUNCNAME
-
-}
-
-testSpacesInFilenames () {
-
-    createDirectoryWithSomeFiles
-    #Regular execution of PPSS
-    RES=$( { $PPSS -d /tmp/$TMP_DIR -c 'ls -alh ' >> /dev/null ; } 2>&1 )  
-	assertEquals "PPSS did not execute properly." 0 "$?"
-
-    assertNull "PPSS retured some errors..." "$RES"
-    if [ ! "$?" == "0" ]
-    then
-        echo "RES IS $RES"
-    fi
-    
-    grep "SUCCESS" $JOBLOG/* >> /dev/null 2>&1
-    assertEquals "Found error with space in filename $TMP_FILE" "0" "$?"
-
-    NUMBER=`find /tmp/$TMP_DIR ! -type d | wc -l`
-    LOGS=`ls -1 $JOBLOG/* | wc -l`
-    assertEquals "Did not find equal files and joblogs $TMP_FILE" "$NUMBER" "$LOGS" 
-
-    rm -rf "/tmp/$TMP_DIR"   
-    rename-ppss-dir $FUNCNAME
-}
-
-testSpecialCharacterHandling () {
-
-    RES=$( { $PPSS -f "$INPUTFILESPECIAL" -c 'echo ' >> /dev/null ; } 2>&1 )  
-	assertEquals "PPSS did not execute properly." 0 "$?"
-    assertNull "PPSS retured some errors..." "$RES"
-    if [ ! "$?" == "0" ]
-    then
-        echo "RES IS $RES"
-    fi
-
-    RES=$( { cat "$INPUTFILESPECIAL" | $PPSS -f - -c 'echo ' >> /dev/null ; } 2>&1 )  
-	assertEquals "PPSS did not execute properly." 0 "$?"
-    assertNull "PPSS retured some errors..." "$RES"
-
-    RES=`find ppss_dir/PPSS_LOCAL_OUTPUT | wc -l | sed 's/\ //g'`
-    LINES=`wc -l "$INPUTFILESPECIAL" | awk '{ print $1 }'`
-    assertEquals "To many lock files..." "$((LINES+1))" "$RES"
-
-    RES1=`ls -1 $JOBLOG`
-    RES2=`ls -1 $LOCALOUTPUT`
-
-    assertEquals "RES1 $RES1 is not the same as RES2 $RES2" "$RES1" "$RES2"
+    EXPECTED=32
+    assertEquals "Recursion not correct." "$EXPECTED" "$RES"
 
     rename-ppss-dir $FUNCNAME
 }
 
-testSkippingOfProcessedItems () {
+testNoRecursion () {
 
-    createDirectoryWithSomeFiles    
+    init_get_all_items 0    
+    EXPECTED=12
 
-    RES=$( { $PPSS -d /tmp/$TMP_DIR -c 'echo ' >> /dev/null ; } 2>&1 )
-    assertEquals "PPSS did not execute properly." 0 "$?"
-    assertNull "PPSS retured some errors..." "$RES"
+    assertEquals "Recursion not correct." "$EXPECTED" "$RES"
 
-    RES=$( { $PPSS -d /tmp/$TMP_DIR -c 'echo ' >> /dev/null ; } 2>&1 )
-    assertEquals "PPSS did not execute properly." 0 "$?"
-    assertNull "PPSS retured some errors..." "$RES"
-
-    RES=`grep -c -i locked ./$PPSS_DIR/ppss-log* | tail -n 1 | cut -d ":" -f 2`
-    assertEquals "Skipping of items went wrong." 2 "$RES"
-
-    rename-ppss-dir $FUNCNAME-1
-
-    RES=$( { $PPSS -f $INPUTFILESPECIAL -c 'echo ' >> /dev/null ; } 2>&1 )
-    assertEquals "PPSS did not execute properly." 0 "$?"
-    assertNull "PPSS retured some errors..." "$RES"
-
-    RES=$( { $PPSS -f $INPUTFILESPECIAL -c 'echo ' >> /dev/null ; } 2>&1 )
-    assertEquals "PPSS did not execute properly." 0 "$?"
-    assertNull "PPSS retured some errors..." "$RES"
-
-    RES=`grep -c -i locked ./$PPSS_DIR/ppss-log* | tail -n 1 | cut -d ":" -f 2`
-    assertEquals "Skipping of items went wrong." 8 "$RES"
-
-    rm -rf "/tmp/$TMP_DIR"   
-    rename-ppss-dir $FUNCNAME-2
+    rename-ppss-dir $FUNCNAME
 }
-
-testExistLogFiles () {
-
-	$PPSS -f "$INPUTFILENORMAL" -c 'echo "$ITEM"' >> /dev/null
-	assertEquals "PPSS did not execute properly." 0 "$?"
-
-	for x in $NORMALTESTFILES
-	do
-		assertTrue "[ -e $JOBLOG/$x ]"
-	done
-
-	rename-ppss-dir $FUNCNAME
-}
-
-getStatusOfJob () {
-
-	EXPECTED="$1"
-
-	if [ "$EXPECTED" == "SUCCESS" ]
-	then
-		$PPSS -f "$INPUTFILENORMAL" -c 'echo ' >> /dev/null
-        	assertEquals "PPSS did not execute properly." 0 "$?"
-	elif [ "$EXPECTED" == "FAILURE" ]
-	then
-		$PPSS -f "$INPUTFILENORMAL" -c 'thiscommandfails ' >> /dev/null
-        	assertEquals "PPSS did not execute properly." 0 "$?"
-	fi
-
-	for x in $NORMALTESTFILES
-	do
-        STATUS=`parseJobStatus "$x"`
-        assertEquals "FAILED WITH STATUS $STATUS." "$EXPECTED" "$STATUS"
-    done
-
-	rename-ppss-dir "$FUNCNAME-$EXPECTED"
-}
-
-
-testErrorHandlingOK () {
-
-	getStatusOfJob SUCCESS
-}
-
-testErrorHandlingFAIL () {
-
-	getStatusOfJob FAILURE
-}
-
-
-
 
 . ./shunit2
