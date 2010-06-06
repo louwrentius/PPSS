@@ -24,7 +24,6 @@
 # Handling control-c for a clean shutdown.
 #
 trap 'kill_process' SIGINT 
-
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
 SCRIPT_VERSION="2.70"
 
@@ -760,12 +759,10 @@ expand_str () {
 
 are_we_sourced () {
 
-    if [ "$SOURCED" == "-bash" ] || [ "$SOURCED" == "bash" ] || [ "$SOURCED" = "dash" ] 
+    if [ ! "$SOURCED" == "./ppss" ] 
     then
-        log DEBUG "This script is sourced."
         return 0
     else
-        log DEBUG "This script is not sourced."
         return 1
     fi
 }
@@ -1574,7 +1571,7 @@ get_all_items () {
             else
                 log DEBUG "Recursion is disabled."
                 #ITEMS=`exec_cmd "ls -1 $SRC_DIR"`
-                `exec_cmd "ls -1 $SRC_DIR" > "$LOCAL_INPUT_FILE"`
+                `exec_cmd "find $SRC_DIR/ -d 1 ! -type d" > "$LOCAL_INPUT_FILE"`
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             fi
         else 
@@ -1589,7 +1586,7 @@ get_all_items () {
                 else
                     log DEBUG "Recursion is disabled."
                     #ITEMS=`ls -1 "$SRC_DIR"`
-                    `ls -1 "$SRC_DIR" >> "$LOCAL_INPUT_FILE"`
+                    `find "$SRC_DIR/" -d 1 ! -type d >> "$LOCAL_INPUT_FILE"`
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 fi
                 if [ ! -e "$LOCAL_INPUT_FILE" ]
@@ -2393,8 +2390,6 @@ then
     # First step: process all command-line arguments.
     # 
     process_arguments "$@"
-
-
 
     #
     # This command starts the that sets the whole framework in motion.
