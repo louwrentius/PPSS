@@ -714,6 +714,14 @@ process_arguments () {
         exit 1
     fi
 
+    if [ ! -e "$SRC_DIR" ]
+    then
+        showusage_short
+        echo
+        log ERROR "Source directory $SRC_DIR does not exist."
+        exit 1
+    fi
+
     if [ "$DAEMON" == "1" ] && [ -z "$SRC_DIR" ]
     then
         showusage_short
@@ -1414,6 +1422,11 @@ escape_item () {
 
 download_item () {
 
+    if [ ! "$DOWNLOAD_TO_NODE" == "1" ] || [ "$VIRTUAL" == "1" ] 
+    then
+        return 1
+    fi
+
     ITEM="$1"
     VIRTUAL="0"
     ERR_STATE="0"
@@ -1556,6 +1569,11 @@ get_all_items () {
     then
         get_input_lock
     fi
+    
+    if [ -e "$LOCAL_INPUT_FILE" ] && are_we_sourced
+    then
+        rm "$LOCAL_INPUT_FILE"
+    fi
 
     count=0
 
@@ -1565,12 +1583,10 @@ get_all_items () {
         then
             if [ "$RECURSION" == "1" ]
             then
-                #ITEMS=`exec_cmd "find $SRC_DIR/ ! -type d"`
                 `exec_cmd "find $SRC_DIR/ ! -type d" > "$LOCAL_INPUT_FILE"`
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             else
                 log DEBUG "Recursion is disabled."
-                #ITEMS=`exec_cmd "ls -1 $SRC_DIR"`
                 `exec_cmd "find $SRC_DIR/ -d 1 ! -type d" > "$LOCAL_INPUT_FILE"`
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             fi
@@ -1580,13 +1596,11 @@ get_all_items () {
                 if [ "$RECURSION" == "1" ]
                 then
                     log DEBUG "Recursion is enabled."
-                    #ITEMS=`find "$SRC_DIR/" ! -type d`
-                    `find "$SRC_DIR/" ! -type d >> "$LOCAL_INPUT_FILE"` 
+                    `find "$SRC_DIR"/ ! -type d >> "$LOCAL_INPUT_FILE"` 
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 else
                     log DEBUG "Recursion is disabled."
-                    #ITEMS=`ls -1 "$SRC_DIR"`
-                    `find "$SRC_DIR/" -d 1 ! -type d >> "$LOCAL_INPUT_FILE"`
+                    `find "$SRC_DIR"/ -d 1 ! -type d >> "$LOCAL_INPUT_FILE"`
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 fi
                 if [ ! -e "$LOCAL_INPUT_FILE" ]
@@ -1997,7 +2011,10 @@ commando () {
         fi
     fi
 
-    start_single_worker
+    if ! are_we_sourced
+    then
+        start_single_worker
+    fi
     return $?
 }
 

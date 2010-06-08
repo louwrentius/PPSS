@@ -7,6 +7,7 @@ PPSS=./ppss
 PPSS_DIR=ppss_dir
 export PPSS_DEBUG=1
 HOST_ARCH=`uname`
+SPECIAL_DIR=$TMP_DIR/root/special
 . "$PPSS"
 
 cleanup () {
@@ -43,7 +44,7 @@ oneTimeSetUp () {
 
 	JOBLOG=./$PPSS_DIR/job_log
 	INPUTFILENORMAL=test-normal.input
-    INPUTFILESPECIAL=test-special.input
+    INPUTFILESPECIAL_DIR=test-special.input
     LOCALOUTPUT=ppss_dir/PPSS_LOCAL_OUTPUT
 	REMOVEFILES="$PPSS_DIR test-ppss-*"
 
@@ -76,11 +77,9 @@ oneTimeTearDown () {
 	then
         cleanup 
     fi
-
 }
 
 createDirectoryWithSomeFiles () {
-
 
     ROOT_DIR=$TMP_DIR/root
     CHILD_1=$ROOT_DIR/child_1
@@ -92,13 +91,28 @@ createDirectoryWithSomeFiles () {
 
     for x in {1..10}
     do
-        touch "$ROOT_DIR/file-$x"
+        touch "$ROOT_DIR/file-$x" 
         touch "$CHILD_1/file-$x"
         touch "$CHILD_2/file-$x"
     done
 
     ln -s /etc/resolve.conf "$ROOT_DIR" 2> /dev/null
     ln -s /etc/hosts "$ROOT_DIR" 2> /dev/null
+}
+
+createSpecialFilenames () {
+
+    ERROR=0
+    mkdir -p "$SPECIAL_DIR"
+
+    touch "$SPECIAL_DIR/a file with spaces" 
+    touch "$SPECIAL_DIR/a\\'file\\'with\\'quotes"
+    touch "$SPECIAL_DIR/a{file}with{curly}brackets}"
+    touch "$SPECIAL_DIR/a(file)with(parenthesis)"
+    touch "$SPECIAL_DIR/a\\file\\with\\backslashes"
+    touch "$SPECIAL_DIR/a!file!with!exclamationmarks"
+    touch "$SPECIAL_DIR/a filé with special characters"
+    touch "$SPECIAL_DIR/a\"file\"with\"double\"quotes"
 }
 
 testMD5 () {
@@ -114,18 +128,19 @@ testMD5 () {
 
 init_get_all_items () {
 
-    RECURSION="$1"
+    RECURSION="$2"
+    DIR="$1"
     createDirectoryWithSomeFiles
     create_working_directory
     init_vars > /dev/null 2>&1
-    export SRC_DIR=$TMP_DIR/root
+    export SRC_DIR=$DIR
     get_all_items
     RES=`get_contents_of_input_file`
 }
 
 testRecursion () {
 
-    init_get_all_items 1
+    init_get_all_items $TMP_DIR/root 1
 
     EXPECTED=32
     assertEquals "Recursion not correct." "$EXPECTED" "$RES"
@@ -135,12 +150,64 @@ testRecursion () {
 
 testNoRecursion () {
 
-    init_get_all_items 0    
+    init_get_all_items $TMP_DIR/root 0    
     EXPECTED=12
 
     assertEquals "Recursion not correct." "$EXPECTED" "$RES"
 
     rename-ppss-dir $FUNCNAME
+}
+
+testGetItem () {
+
+    createSpecialFilenames
+    init_get_all_items $TMP_DIR/root 1
+    get_item
+    if [ -z "$ITEM" ]
+    then
+        ERROR=1
+    else 
+        ERROR=0
+    fi
+    EXPECTED=0
+    assertEquals "Get item failed." "$EXPECTED" "$ERROR"
+
+    i=1
+    ERROR=0
+    while get_item
+    do
+        ((i++))
+    done
+    EXPECTED=40
+    assertEquals "Got wrong number of items." "$EXPECTED" "$i"
+}
+
+testEscaping () {
+
+    createSpecialFilenames
+    init_get_all_items $TMP_DIR/root 1
+
+    RES1=`find $TMP_DIR/root/ ! -type d`
+
+    while get_item
+    do
+        RES2="$RES2$ITEM"$'\n'
+    done
+    RES1="$RES1"$'\n' # NASTY HACK YUCK
+    assertEquals "Input file and actual files not the same!" "$RES1" "$RES2"
+}
+
+inotestNumberOfLogfiles () {
+
+    createSpecialFilenames
+    init_get_all_items $TMP_DIR/root 1
+    COMMAND='echo ' 
+    while get_item
+    do
+        commando "$ITEM"
+    done
+    RES=`ls -1 $PPSS_DIR/job_log/ | wc -l | awk '{ print $1}'`
+    assertEquals "Got wrong number of log files." 40 "$RES"
 }
 
 . ./shunit2
