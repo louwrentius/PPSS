@@ -1532,14 +1532,9 @@ lock_item () {
     
     ITEM="$1"
     LOCK_FILE_NAME_MD5=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
-    if [ -z "$SSH_SERVER" ]
-    then
-        ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME_MD5"
-    else
-        ITEM_LOCK_FILE="$PPSS_HOME_DIR/$ITEM_LOCK_DIR/$LOCK_FILE_NAME_MD5"
-    fi
+    ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME_MD5"
     log DEBUG "Locking item $ITEM_LOCK_FILE"
-    exec_cmd "mkdir -p $ITEM_LOCK_FILE >> /dev/null 2>&1"
+    exec_cmd "mkdir $ITEM_LOCK_FILE >> /dev/null 2>&1"
     return "$?"
 }
 
@@ -1712,13 +1707,16 @@ get_item () {
     else
         ((GLOBAL_COUNTER++))
         echo $GLOBAL_COUNTER > $GLOBAL_COUNTER_FILE
+        LOCK=""
         if [ ! -z "$SSH_SERVER" ]
         then
             lock_item "$ITEM"
+            LOCK="$?"
         else
             log DEBUG "Item lock disabled." 
+            LOCK=0
         fi
-        if [ ! "$?" ]
+        if [ ! "$LOCK" = "0" ]
         then
             log DEBUG "Item $ITEM is locked."
             release_global_lock
@@ -2223,7 +2221,7 @@ show_status () {
     
     if [ ! -z "$ITEMS" ] && [ ! "$ITEMS" == "0" ]
     then
-        PROCESSED=`exec_cmd "ls -1 $PPSS_HOME_DIR/$ITEM_LOCK_DIR 2>/dev/null | wc -l" 1` 2>&1 >> /dev/null
+        PROCESSED=`exec_cmd "ls -1 $ITEM_LOCK_DIR 2>/dev/null | wc -l" 1` 2>&1 >> /dev/null
         TMP_STATUS=$((100 * $PROCESSED / $ITEMS))
         log DSPLY "Status:\t\t$TMP_STATUS percent complete."
     else
