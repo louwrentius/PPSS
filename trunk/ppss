@@ -1469,7 +1469,7 @@ download_item () {
                 escape_item "$DOWNLOAD_ITEM" 
                 mkdir -p "$PPSS_LOCAL_TMPDIR/$LOCAL_DIR"
                 log DEBUG "$SSH_SERVER:$ITEM_ESCAPED $PPSS_LOCAL_TMPDIR/$LOCAL_DIR"
-                scp -q $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER:"$ITEM_ESCAPED" $PPSS_LOCAL_TMPDIR/"$LOCAL_DIR"
+                scp -q $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER:"$ITEM_ESCAPED" ./$PPSS_LOCAL_TMPDIR/"$LOCAL_DIR"
                 log DEBUG "Exit code of remote transfer is $?"
             else
                 escape_item "$DOWNLOAD_ITEM" 
