@@ -12,6 +12,9 @@ SPECIAL_DIR=$TMP_DIR/root/special
 
 cleanup () {
 
+        unset RES1
+        unset RES2
+
         for x in $REMOVEFILES
         do
             if [ -e ./$x ]
@@ -180,24 +183,35 @@ testGetItem () {
     done
     EXPECTED=40
     assertEquals "Got wrong number of items." "$EXPECTED" "$i"
+
+    rename-ppss-dir $FUNCNAME
+    cleanup
 }
 
-testEscaping () {
-
-    createSpecialFilenames
-    init_get_all_items $TMP_DIR/root 1
-
-    RES1=`find $TMP_DIR/root/ ! -type d`
+return_all_items () {
 
     while get_item
     do
         RES2="$RES2$ITEM"$'\n'
     done
-    RES1="$RES1"$'\n' # NASTY HACK YUCK
-    assertEquals "Input file and actual files not the same!" "$RES1" "$RES2"
 }
 
-inotestNumberOfLogfiles () {
+testNumberOfItems () {
+
+    createSpecialFilenames
+    init_get_all_items $TMP_DIR/root 1
+
+    RES1=`find $TMP_DIR/root/ ! -type d`
+    RES1="$RES1"$'\n' # NASTY HACK YUCK
+
+    return_all_items
+
+    assertEquals "Input file and actual files not the same!" "$RES1" "$RES2"
+    rename-ppss-dir $FUNCNAME
+    cleanup
+}
+
+testNumberOfLogfiles () {
 
     createSpecialFilenames
     init_get_all_items $TMP_DIR/root 1
@@ -208,6 +222,8 @@ inotestNumberOfLogfiles () {
     done
     RES=`ls -1 $PPSS_DIR/job_log/ | wc -l | awk '{ print $1}'`
     assertEquals "Got wrong number of log files." 40 "$RES"
+    rename-ppss-dir $FUNCNAME
+    cleanup
 }
 
 . ./shunit2

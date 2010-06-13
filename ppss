@@ -24,6 +24,7 @@
 # Handling control-c for a clean shutdown.
 #
 trap 'kill_process' SIGINT 
+
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
 SCRIPT_VERSION="2.70"
 
@@ -714,7 +715,7 @@ process_arguments () {
         exit 1
     fi
 
-    if [ ! -e "$SRC_DIR" ]
+    if [ ! -e "$SRC_DIR" ] && [ -z "$MODE" ] 
     then
         showusage_short
         echo
@@ -897,13 +898,6 @@ init_vars () {
     #
     # Create a remote homedir for PPSS
     #
-    does_file_exist "$PPSS_HOME_DIR"
-    if [ ! "$?" = "0" ] && [ ! -z "$SSH_SERVER" ]
-    then
-        log DEBUG "Remote PPSS home directory $PPSS_HOME_DIR does not exist. Creating."
-        exec_cmd "mkdir -p $PPSS_HOME_DIR/$PPSS_DIR"
-    fi
-
 
     echo 1 > $GLOBAL_COUNTER_FILE
 
@@ -1036,7 +1030,7 @@ erase_ppss () {
     then
         for NODE in `cat $NODES_FILE`
         do
-            log DSPLY "Erasing PPSS homedir $PPSS_DIR from node $NODE."
+            log DSPLY "Erasing PPSS homedir $PPSS_HOME_DIR from node $NODE."
             ssh -q $SSH_KEY $SSH_OPTS $USER@$NODE "rm -rf $PPSS_HOME_DIR"
         done
     else
@@ -1206,6 +1200,7 @@ start_ppss_on_node () {
     NODE="$1"
     log DSPLY "Starting PPSS on node $NODE."
     ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
+    echo "ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG"
 }
 
 test_server () {
@@ -1221,9 +1216,17 @@ test_server () {
         SSH_MASTER_PID="$!"
         log DEBUG "SSH Master pid is $SSH_MASTER_PID"
         log DSPLY "Connected to server: $SSH_SERVER"
+
+        does_file_exist "$PPSS_HOME_DIR/$PPSS_DIR"
+        if [ ! "$?" = "0" ] && [ ! -z "$SSH_SERVER" ]
+        then
+            log DEBUG "Remote PPSS home directory $PPSS_HOME_DIR/$PPSS_DIR does not exist. Creating."
+            exec_cmd "mkdir -p $PPSS_HOME_DIR/$PPSS_DIR"
+        fi
     else
         log DEBUG "No remote server specified, assuming stand-alone mode."
     fi
+
 }
 
 get_no_of_cpus () {
@@ -1528,9 +1531,15 @@ upload_item () {
 lock_item () {
     
     ITEM="$1"
-    LOCK_FILE_NAME=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
-    ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME"
-    exec_cmd "mkdir $ITEM_LOCK_FILE >> /dev/null 2>&1"
+    LOCK_FILE_NAME_MD5=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
+    if [ -z "$SSH_SERVER" ]
+    then
+        ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME_MD5"
+    else
+        ITEM_LOCK_FILE="$PPSS_HOME_DIR/$ITEM_LOCK_DIR/$LOCK_FILE_NAME_MD5"
+    fi
+    log DEBUG "Locking item $ITEM_LOCK_FILE"
+    exec_cmd "mkdir -p $ITEM_LOCK_FILE >> /dev/null 2>&1"
     return "$?"
 }
 
@@ -1703,7 +1712,7 @@ get_item () {
     else
         ((GLOBAL_COUNTER++))
         echo $GLOBAL_COUNTER > $GLOBAL_COUNTER_FILE
-        if [ "$DISABLE_ITEM_LOCK" == "0" ]
+        if [ ! -z "$SSH_SERVER" ]
         then
             lock_item "$ITEM"
         else
@@ -2207,19 +2216,10 @@ show_status () {
     then
         SSH_KEY="-i $SSH_KEY"
     fi
-    if [ -z "$INPUT_FILE" ]
-    then
-        if [ "$RECURSION" == "1" ]
-        then
-            ITEMS=`exec_cmd "find $SRC_DIR ! -type d 2>/dev/null | wc -l" 1`  
-        else
-            ITEMS=`exec_cmd "ls -1 $SRC_DIR  2>/dev/null | wc -l" 1`  
-        fi
-    else
-        ITEMS=`exec_cmd "cat $PPSS_HOME_DIR/$LOCAL_INPUT_FILE 2>/dev/null | wc -l" 1`
-    fi
+    
+    get_all_items
 
-    ITEMS=`echo $ITEMS | sed s/\ //g`
+    ITEMS=`wc -l $LOCAL_INPUT_FILE | awk '{ print $1 }'`
     
     if [ ! -z "$ITEMS" ] && [ ! "$ITEMS" == "0" ]
     then
@@ -2366,6 +2366,7 @@ main () {
         status )
                     LOGFILE=/dev/null
                     display_header
+                    init_vars
                     get_all_items
                     show_status
                     exit 0
