@@ -768,12 +768,14 @@ expand_str () {
 
 are_we_sourced () {
 
-    if [ ! "$SOURCED" == "./ppss" ] 
+    RES=`basename $SOURCED`
+    
+    if [ "$RES" = "ppss" ]
     then
-        return 0
-    else
         return 1
-    fi
+    else
+        return 0
+    fi 
 }
 
 get_time_in_seconds () {
@@ -1200,7 +1202,6 @@ start_ppss_on_node () {
     NODE="$1"
     log DSPLY "Starting PPSS on node $NODE."
     ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
-    echo "ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG"
 }
 
 test_server () {
@@ -1475,7 +1476,6 @@ download_item () {
                 log DEBUG "$SSH_SERVER:$ITEM_ESCAPED $PPSS_LOCAL_TMPDIR"
                 scp -q $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER:"$ITEM_ESCAPED" $PPSS_LOCAL_TMPDIR 
                 log DEBUG "Exit code of remote transfer is $?"
-                
             fi
         else
             cp "$ITEM" $PPSS_LOCAL_TMPDIR 
