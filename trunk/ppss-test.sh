@@ -15,7 +15,8 @@ cleanup () {
         unset RES1
         unset RES2
         GLOBAL_COUNTER=1
-
+    if [ ! "$DEBUG" = "debug" ]
+    then
         for x in $REMOVEFILES
         do
             if [ -e ./$x ]
@@ -23,6 +24,8 @@ cleanup () {
                 rm -r ./$x
             fi
         done
+    fi
+
         if [ ! -z "$TMP_DIR" ]
         then
             rm -rf "/$TMP_DIR"   
@@ -228,8 +231,22 @@ testNumberOfLogfiles () {
     do
         commando "$ITEM"
     done
-    RES=`ls -1 $PPSS_DIR/job_log/ | wc -l | awk '{ print $1}'`
-    assertEquals "Got wrong number of log files." 40 "$RES"
+    RESULT=`ls -1 $PPSS_DIR/job_log/ | wc -l | awk '{ print $1}'`
+    EXPECTED=40
+    assertEquals "Got wrong number of log files." "$EXPECTED" "$RESULT"
+    rename-ppss-dir $FUNCNAME
+}
+
+testUserInputFile () {
+
+    cleanup
+    INPUT_FILE=test-special.input
+    create_working_directory
+    init_vars > /dev/null 2>&1
+    get_all_items    
+    RESULT=`return_all_items`
+    echo "- $RESULT"
+
     rename-ppss-dir $FUNCNAME
 }
 
