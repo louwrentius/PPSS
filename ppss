@@ -26,7 +26,7 @@
 trap 'kill_process' SIGINT 
 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.80"
+SCRIPT_VERSION="2.81"
 
 #
 # The first argument to this script can be a mode.
@@ -81,6 +81,7 @@ RECURSION="1"                                           # all running processes.
 START_PPSS=""
 STOP_PPSS=""
 SIZE_OF_INPUT=""
+LOCAL_LOCKING="1"
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -1652,7 +1653,7 @@ get_item () {
     else
         ((GLOBAL_COUNTER++))
 
-        if [ ! -z "$SSH_SERVER" ]
+        if [ ! -z "$SSH_SERVER" ]  || [ "$LOCAL_LOCKING" = "1" ]
         then
             lock_item "$ITEM"
             LOCK="$?"
@@ -1663,10 +1664,12 @@ get_item () {
                 # Recursion, get_ttem calls itself, until all items are done.
                 #
                 get_item
+            else
+                log DEBUG "Got lock on $ITEM"
+                download_item "$ITEM"
+                return 0
             fi
         else
-            log DEBUG "Got lock on $ITEM, processing."
-            download_item "$ITEM"
             return 0
         fi
     fi
@@ -1820,7 +1823,7 @@ commando () {
     then 
             if [ "$RECURSION" == "1" ]
             then
-                OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$DIR_NAME"/"$ITEM_NO_PATH" 
+                OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$DIR_NAME"/ 
             else
                 OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$ITEM_NO_PATH"
             fi
@@ -1831,13 +1834,13 @@ commando () {
         #
         OUTPUT_DIR="$PPSS_LOCAL_OUTPUT"
     fi
-    log DEBUG "Local output dir is $OUTPUT_DIR"
     
     #
-    # FIXME!
+    # Create the local output directory.
     #
-    if [ "$PPSS_OUTPUT" == "1" ]
+    if [ ! -z "$OUTPUT_DIR" ]
     then
+        log DEBUG "Local output dir is $OUTPUT_DIR"
         mkdir -p "$OUTPUT_DIR"
     fi
     
@@ -1938,6 +1941,40 @@ commando () {
     start_single_worker
 }
 
+infanticide () {
+
+    #
+    # This code is run if ctrl+c is pressed. Very important to prevent
+    # any child processes running after the parent has died. Keeps the system clean.
+    #
+    # This command kills all processes that are related to the master
+    # process as defined by $PID. All processes that have ever been
+    # spawned, although disowned or backgrounded will be killed...
+    #
+    PROCLIST=`ps a -o pid,pgid,ppid,command | grep [0-9] | grep $PID | grep -v -i grep`
+    oldIFS=$IFS # save the field separator
+    IFS=$'\n' # new field separator, the end of line  
+    for x in `echo "$PROCLIST"`
+    do
+        MYPPID=`echo $x | awk '{ print $3 }'`
+        MYPID=`echo $x | awk '{ print $1 }'`
+        if [ ! "$MYPPID" == "$PID" ] && [ ! "$MYPPID" == "1" ]
+        then
+            if [ ! "$MYPID" == "$PID" ] 
+            then
+                log DEBUG "Killing process $MYPID"
+                kill $MYPID >> /dev/null 2>&1
+            else
+                log DEBUG "Not killing master process..$MYPID.." 
+            fi
+        else
+                log DEBUG "Not killing listener process. $MYPID.."
+        fi
+    done
+    IFS=$oldIFS
+
+}
+
 listen_for_job () {
 
     FINISHED=0
@@ -1988,35 +2025,7 @@ listen_for_job () {
             fi
         elif [ "$event" == "$KILL_KEY" ]
         then
-            #
-            # If all workers are finished, it is time to kill all remaining
-            # processes, terminate ssh processes and the listener itself.
-            #
-            # This command kills all processes that are related to the master
-            # process as defined by $PID. All processes that have ever been
-            # spawned, although disowned or backgrounded will be killed...
-            #
-            PROCLIST=`ps a -o pid,pgid,ppid,command | grep [0-9] | grep $PID | grep -v -i grep`
-            oldIFS=$IFS # save the field separator
-            IFS=$'\n' # new field separator, the end of line  
-            for x in `echo "$PROCLIST"`
-            do
-                MYPPID=`echo $x | awk '{ print $3 }'`
-                MYPID=`echo $x | awk '{ print $1 }'`
-                if [ ! "$MYPPID" == "$PID" ] && [ ! "$MYPPID" == "1" ]
-                then
-                    if [ ! "$MYPID" == "$PID" ] 
-                    then
-                        log DEBUG "Killing process $MYPID"
-                        kill $MYPID >> /dev/null 2>&1
-                    else
-                        log DEBUG "Not killing master process..$MYPID.." 
-                    fi
-                else
-                        log DEBUG "Not killing listener process. $MYPID.."
-                fi
-            done
-            IFS=$oldIFS
+            infanticide
             break
         fi
 
@@ -2054,6 +2063,7 @@ listen_for_job () {
 
     set_status STOPPED
     log DEBUG "Listener stopped."
+
     if [ ! "$PERCENT" == "100" ]
     then
         echo
@@ -2061,6 +2071,7 @@ listen_for_job () {
         log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
         log DSPLY "Press ENTER to continue."
     else
+        echo
 	    stop-ppss
         log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
     fi
@@ -2299,6 +2310,9 @@ main () {
     esac
 }
 
+#
+# PPSS can be sourced. This is mainly for testing purposes (unit tests).
+#
 if ! are_we_sourced
 then
 
