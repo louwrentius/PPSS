@@ -26,7 +26,7 @@
 trap 'kill_process' SIGINT 
 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.70"
+SCRIPT_VERSION="2.80"
 
 #
 # The first argument to this script can be a mode.
@@ -58,12 +58,10 @@ PPSS_HOME_DIR="ppss-home"
 SOURCED="$0"
 
 PID="$$"
-GLOBAL_LOCK="$PPSS_DIR/PPSS-GLOBAL-LOCK-$PID"           # Global lock file used by local PPSS instance.
 PAUSE_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/pause_signal"                   # Pause processing if this file is present.
 PAUSE_DELAY="60"                                          # Polling every 1 minutes by default.
 STOP_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/stop_signal"                     # Stop processing if this file is present.
-GLOBAL_COUNTER=""
-GLOBAL_COUNTER_FILE="$PPSS_DIR/ppss-input-counter-$PID"
+GLOBAL_COUNTER=1
 LISTOFITEMS="$PPSS_DIR/INPUT_FILE-$PID"
 JOB_LOG_DIR="$PPSS_DIR/job_log"                         # Directory containing log files of processed items.
 LOGFILE="$PPSS_DIR/ppss-log-$PID.txt"                     # General PPSS log file. Contains lots of info.
@@ -409,16 +407,6 @@ cleanup () {
     if [ -e "$FIFO" ]
     then 
         rm "$FIFO"
-    fi
-
-    if [ -e "$GLOBAL_COUNTER_FILE" ] 
-    then
-        rm "$GLOBAL_COUNTER_FILE"
-    fi
-
-    if [ -e "$GLOBAL_LOCK" ] 
-    then
-        rm -rf "$GLOBAL_LOCK"
     fi
 
     if [ -e "$SSH_SOCKET" ]
@@ -896,12 +884,6 @@ init_vars () {
         MIN_JOBS=3
     fi
 
-    #
-    # Create a remote homedir for PPSS
-    #
-
-    echo 1 > $GLOBAL_COUNTER_FILE
-
     FIFO=/tmp/ppss-fifo-$RANDOM-$RANDOM
 
     if [ ! -e "$FIFO" ]
@@ -991,6 +973,7 @@ init_vars () {
     then
         mkdir "$PPSS_LOCAL_OUTPUT"
     fi
+
 }
 
 get_status () {
@@ -1039,13 +1022,17 @@ erase_ppss () {
 }
 
 ec2_get_pending_nodes() {
-
+    #
+    # This function has naver been tested by the author of PPSS.
+    #
     RES="$(ec2-describe-instances | grep 'INSTANCE' | awk '{print $4}'| grep pending)"
     echo "$RES"
 }
 
 ec2_launch_nodes() {
-    
+    #
+    # This function has naver been tested by the author of PPSS.
+    #
     ec2run $AMI_ID -n $NUM_NODES -t $INSTANCE_TYPE -k $AWS_KEYPAIR -g $SECURITY_GROUP  
 
     #
@@ -1603,6 +1590,7 @@ get_all_items () {
     fi
 
     SIZE_OF_INPUT=$(wc -l "$LISTOFITEMS" | awk '{ print $1 }')
+
     if [ "$SIZE_OF_INPUT" -le "0" ]
     then
         log ERROR "Source file/dir seems to be empty."
@@ -1610,7 +1598,6 @@ get_all_items () {
         cleanup
         exit 1
     fi
-    
 }
 
 get_item () {
@@ -1619,30 +1606,42 @@ get_item () {
 
     if [ "$STOP" == "1" ]
     then
+        log DEBUG "Found stop signal."
         return 1
     fi
 
-    SIZE_OF_INPUT=$(wc -l "$LISTOFITEMS" | awk '{ print $1 }')
+    #
+    # Return error if list size is empty.
+    #
+    if [ -z "$SIZE_OF_INPUT" ]
+    then
+        log DEBUG "Got no size of input..."
+        return 1
+    fi
+
     #
     # Return error if the list is empty.
     #
-    #if [ "$SIZE_OF_INPUT" -le "0" ] 
-    #then
-    #    return 1
-    #fi
+    if [ "$SIZE_OF_INPUT" -le "0" ] 
+    then
+        SIZE_OF_INPUT=$(wc -l "$LISTOFITEMS" | awk '{ print $1 }')
+        if [ "$?" = "0" ]
+        then
+            return 0
+        else
+            log DEBUG "Size of input 0 or less."
+            return 1
+        fi
+    fi
 
-    #
-    # This variable is used to walk thtough all input file items.
-    #
-    GLOBAL_COUNTER=$(cat $GLOBAL_COUNTER_FILE)
-    
     #
     # Check if all items have been processed.
     #
-    #if [ "$GLOBAL_COUNTER" -gt "$SIZE_OF_INPUT" ]
-    #then
-    #    return 1
-    #fi
+    if [ "$GLOBAL_COUNTER" -gt "$SIZE_OF_INPUT" ]
+    then
+        log DEBUG "Counter $GLOBAL_COUNTER is greater than sizeof input $SIZE_OF_INPUT."
+        return 1
+    fi
 
     ITEM="$(sed -n $GLOBAL_COUNTER\p $LISTOFITEMS)"
 
@@ -1652,23 +1651,19 @@ get_item () {
         return 1
     else
         ((GLOBAL_COUNTER++))
-        echo $GLOBAL_COUNTER > $GLOBAL_COUNTER_FILE
-        LOCK=""
+
         if [ ! -z "$SSH_SERVER" ]
         then
             lock_item "$ITEM"
             LOCK="$?"
-        else
-            log DEBUG "Item lock disabled - no remote server configured." 
-            LOCK=0
-        fi
-        if [ ! "$LOCK" = "0" ]
-        then
-            log DEBUG "Item $ITEM is locked."
-            #
-            # Recursion, get_ttem calls itself, until all items are done.
-            #
-            get_item
+            if [ ! "$LOCK" = "0" ]
+            then
+                log DEBUG "Item $ITEM is locked."
+                #
+                # Recursion, get_ttem calls itself, until all items are done.
+                #
+                get_item
+            fi
         else
             log DEBUG "Got lock on $ITEM, processing."
             download_item "$ITEM"
@@ -1867,7 +1862,6 @@ commando () {
     RETVAL="$?"
     if [ "$RETVAL" = "0" ]
     then 
-        echo "$TMP - $RETVAL" >> /tmp/hoeba
         eval "$COMMAND" >> "$ITEM_LOG_FILE" 2>&1
         ERROR="$?"
         MYPID="$!"
@@ -2027,7 +2021,6 @@ listen_for_job () {
         fi
 
         SIZE_OF_INPUT=$(wc -l "$LISTOFITEMS" | awk '{ print $1 }')
-        GLOBAL_COUNTER=$(cat $GLOBAL_COUNTER_FILE)
         PERCENT=$((100 * $GLOBAL_COUNTER / $SIZE_OF_INPUT ))
         if [ "$DIED" == "0" ] && [ "$FINISHED" == "0" ] 
         then

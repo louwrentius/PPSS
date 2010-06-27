@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DEBUG="$1"
-VERSION="2.70"
+VERSION="2.80"
 TMP_DIR="/tmp/ppss"
 PPSS=./ppss
 PPSS_DIR=ppss_dir
@@ -14,6 +14,7 @@ cleanup () {
 
         unset RES1
         unset RES2
+        GLOBAL_COUNTER=1
 
         for x in $REMOVEFILES
         do
@@ -37,10 +38,15 @@ parseJobStatus () {
     echo "$STATUS"
 }
 
-get_contents_of_input_file () {
+get_item_count_of_input_file () {
 
-    RES=`cat $PPSS_DIR/INPUT_FILE-$$ | wc -l | awk '{ print $1 }'`
-    echo "$RES"
+    if [ -e "$PPSS_DIR/INPUT_FILE-$$" ]
+    then
+        CONTENTS_OF_INPUTFILE=`cat $PPSS_DIR/INPUT_FILE-$$ | wc -l | awk '{ print $1 }'`
+        echo "$CONTENTS_OF_INPUTFILE"
+    else
+        echo "Error, file $PPSS_DIR/INPUT_FILE-$$ does not exist."
+    fi
 }
 
 oneTimeSetUp () {
@@ -131,22 +137,21 @@ testMD5 () {
 
 init_get_all_items () {
 
-    RECURSION="$2"
     DIR="$1"
+    RECURSION="$2"
     createDirectoryWithSomeFiles
     create_working_directory
-    init_vars > /dev/null 2>&1
     export SRC_DIR=$DIR
+    init_vars > /dev/null 2>&1
     get_all_items
-    RES=`get_contents_of_input_file`
 }
 
 testRecursion () {
 
     init_get_all_items $TMP_DIR/root 1
-
+    RESULT=`get_item_count_of_input_file`
     EXPECTED=32
-    assertEquals "Recursion not correct." "$EXPECTED" "$RES"
+    assertEquals "Recursion not correct." "$EXPECTED" "$RESULT"
 
     rename-ppss-dir $FUNCNAME
 }
@@ -154,9 +159,10 @@ testRecursion () {
 testNoRecursion () {
 
     init_get_all_items $TMP_DIR/root 0    
+    RESULT=`get_item_count_of_input_file`
     EXPECTED=12
 
-    assertEquals "Recursion not correct." "$EXPECTED" "$RES"
+    assertEquals "Recursion not correct." "$EXPECTED" "$RESULT"
 
     rename-ppss-dir $FUNCNAME
 }
@@ -192,23 +198,25 @@ return_all_items () {
 
     while get_item
     do
-        RES2="$RES2$ITEM"$'\n'
+        ALL_ITEMS="$ALL_ITEMS$ITEM"$'\n'
     done
+    echo "$ALL_ITEMS"
 }
 
 testNumberOfItems () {
 
     createSpecialFilenames
-    init_get_all_items $TMP_DIR/root 1
+    RESULT=`init_get_all_items $TMP_DIR/root 1`
 
     RES1=`find $TMP_DIR/root/ ! -type d`
-    RES1="$RES1"$'\n' # NASTY HACK YUCK
 
-    return_all_items
+    RES2=`return_all_items`
+
+    echo "$RES1" > a
+    echo "$RES2" > b
 
     assertEquals "Input file and actual files not the same!" "$RES1" "$RES2"
     rename-ppss-dir $FUNCNAME
-    cleanup
 }
 
 testNumberOfLogfiles () {
@@ -223,7 +231,6 @@ testNumberOfLogfiles () {
     RES=`ls -1 $PPSS_DIR/job_log/ | wc -l | awk '{ print $1}'`
     assertEquals "Got wrong number of log files." 40 "$RES"
     rename-ppss-dir $FUNCNAME
-    cleanup
 }
 
 . ./shunit2
