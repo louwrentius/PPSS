@@ -372,10 +372,10 @@ does_file_exist () {
     RES=`exec_cmd "ls -1 $FILE" 2>&1`
     if [ "$?" = "0" ] 
     then
-        log DEBUG "$FILE does exist - $RES"
+        log DEBUG "$FILE does exist"
         return 0
     else 
-        log DEBUG "$FILE does not exist - $RES"
+        log DEBUG "$FILE does not exist"
         return 1
     fi
 }
@@ -733,7 +733,7 @@ process_arguments () {
     then
         showusage_short
         echo
-        echo "Daemon mode requires an argument to the -d option as a place to put the lock dir."
+        echo "Daemon monitors a specified directory (with the -d option) for files to process."
         echo "Read the on-line manual for more information."
         exit 1
     fi 
@@ -1742,7 +1742,7 @@ start_single_worker () {
     # 
     if ! are_we_sourced
     then
-        if [ "$DAEMON" = "1" ]
+        if [ "$DAEMON" = "1" ] && [ "$INOTIFY" = "1" ]
         then
             echo "$STOP_KEY" >> "$FIFO"
             return $?
@@ -2149,6 +2149,15 @@ inotify_listener () {
     done
 }
 
+start_inotify_listener () {
+
+        ACTIVE_WORKERS=0
+        inotify_listener &
+        MYPID="$!"
+        disown
+        PIDS="$PIDS $MYPID"
+}
+
 listen_for_job () {
 
     FINISHED=0
@@ -2158,11 +2167,8 @@ listen_for_job () {
 
     if [ "$DAEMON" = "1" ] && [ "$INOTIFY" = "1" ]
     then
-        ACTIVE_WORKERS=0
-        inotify_listener &
-        MYPID="$!"
-        disown
-        PIDS="$PIDS $MYPID"
+        log INFO "Linux inotify enabled."
+        start_inotify_listener
     fi
 
     while read event <& 42
