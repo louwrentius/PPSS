@@ -84,6 +84,7 @@ START_PPSS=""
 STOP_PPSS=""
 SIZE_OF_INPUT=""
 LOCAL_LOCKING="1"
+PROCESSED_ITEMS=""
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -1062,7 +1063,6 @@ stack_push () {
     fi
 }   
 
-
 stack_pop () {
     TMP_STACK=""
     i=0
@@ -1567,6 +1567,80 @@ release_input_lock () {
     fi
 }
 
+list_all_input_items () {
+
+    for x in `cat $LISTOFITEMS`
+    do
+        echo "$x"
+    done
+}
+
+return_difference_between_vars () {
+
+    VAR_A="$1"
+    VAR_B="$2"
+
+    for x in $VAR_A
+    do
+        FILE_IS_IN_VAR_B=0
+
+        for y in $VAR_B
+        do
+            TMP=`echo "$x" | $MD5 | awk '{ print $1 }'`
+            if [ "$y" = "$TMP" ]
+            then
+                FILE_IS_PROCESSED=1
+            fi
+        done
+
+        if [ "$FILE_IS_IN_VAR_B" = "0" ]
+        then
+            echo "$x"
+        else
+            log DEBUG "Value $x occurs in 'var b'"
+        fi
+    done
+}
+
+remove_processed_items_from_input_file () {
+
+    # 
+    # This function removes all items that have already been processed.
+    # Processed items have a lock dir in the PPPSS_ITEM_LOCK_DIR.
+    #
+
+    INPUTFILES=`list_all_input_items`
+    RES=`exec_cmd "ls -1 $ITEM_LOCK_DIR"`   
+    rm "$LISTOFITEMS"
+
+
+    for x in $INPUTFILES
+    do
+        FILE_IS_PROCESSED=0
+
+        for y in $RES
+        do
+            TMP=`echo "$x" | $MD5 | awk '{ print $1 }'`
+            if [ "$y" = "$TMP" ]
+            then
+                FILE_IS_PROCESSED=1
+            fi
+        done
+
+        if [ "$FILE_IS_PROCESSED" = "0" ]
+        then
+            echo "$x" >> "$LISTOFITEMS"
+        else
+            log DEBUG "ITEM $x is already processed!"
+        fi
+    done
+}
+
+get_list_of_new_items () {
+
+
+}
+
 get_all_items () {
 
     if [ "$DAEMON" == "1" ]
@@ -1574,7 +1648,7 @@ get_all_items () {
         get_input_lock
     fi
     
-    if [ -e "$LISTOFITEMS" ] && are_we_sourced
+    if [ -e "$LISTOFITEMS" ] 
     then
         rm "$LISTOFITEMS"
     fi
@@ -1594,6 +1668,9 @@ get_all_items () {
                 `exec_cmd "find $SRC_DIR/ -d 1 ! -type d" > "$LISTOFITEMS"`
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             fi
+
+            remove_processed_items_from_input_file
+
         else 
             if [ -e "$SRC_DIR" ]
             then
@@ -2165,32 +2242,34 @@ listen_for_job () {
     PIDS=""
     log DEBUG "Listener started."
 
-    if [ "$DAEMON" = "1" ] && [ "$INOTIFY" = "1" ]
+    if [ "$DAEMON" = "1" ] 
     then
-        log INFO "Linux inotify enabled."
-        start_inotify_listener
+        if [ "$INOTIFY" = "1" ]
+        then
+            log INFO "Linux inotify enabled."
+            start_inotify_listener
+        else
+            log INFO "Linux inotify disabled."
+        fi
     fi
 
     while read event <& 42
     do
         if [ "$event" = "$START_KEY" ]
         then
+            log DEBUG "Got a 'start-key' event"
             if get_item
             then
                 run_command "$ITEM"
             else
                 ((ACTIVE_WORKERS--))
-                if [ "$ACTIVE_WORKERS" -le "0" ] 
+                if [ "$DAEMON" == "1" ] && [ "$INOTIFY" = "0" ]
                 then
-                    if [ "$DAEMON" == "1" ] && [ "$INOTIFY" = "0" ]
-                    then
-                        start_as_daemon
-                    else
-                        break
-                    fi
+                    start_as_daemon
                 else
-                    display_jobs_remaining
+                    break
                 fi
+                display_jobs_remaining
             fi
         elif [ "$event" == "$STOP_KEY" ]
         then
@@ -2353,6 +2432,8 @@ main () {
                         for NODE in `cat $NODES_FILE`
                         do
                             start_ppss_on_node "$NODE"
+                            echo "REMOVE THIS DEBUGGING CODE"
+                            sleep 5
                         done
                     fi
                     cleanup
