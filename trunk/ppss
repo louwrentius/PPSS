@@ -1535,7 +1535,12 @@ lock_item () {
     ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME_MD5"
     log DEBUG "Locking item $ITEM_LOCK_FILE"
     exec_cmd "mkdir $ITEM_LOCK_FILE >> /dev/null 2>&1"
-    return "$?"
+    ERROR="$?"
+    if [ "$ERROR" = "0" ]
+    then
+        exec_cmd "echo "$ITEM" > $ITEM_LOCK_FILE/item.txt"
+    fi
+    return "$ERROR"
 }
 
 get_input_lock () {
@@ -1580,24 +1585,23 @@ return_difference_between_vars () {
     VAR_A="$1"
     VAR_B="$2"
 
-    for x in $VAR_A
+    for a in $VAR_A
     do
-        FILE_IS_IN_VAR_B=0
+        A_IS_IN_B=0
 
-        for y in $VAR_B
+        for b in $VAR_B
         do
-            TMP=`echo "$x" | $MD5 | awk '{ print $1 }'`
-            if [ "$y" = "$TMP" ]
+            if [ "$a" = "$b" ]
             then
-                FILE_IS_PROCESSED=1
+                A_IS_IN_B=1
             fi
         done
 
-        if [ "$FILE_IS_IN_VAR_B" = "0" ]
+        if [ "$A_IS_IN_B" = "0" ]
         then
-            echo "$x"
+            echo "$a"
         else
-            log DEBUG "Value $x occurs in 'var b'"
+            log DEBUG "Value $a occurs in 'var b'"
         fi
     done
 }
@@ -1609,10 +1613,14 @@ remove_processed_items_from_input_file () {
     # Processed items have a lock dir in the PPPSS_ITEM_LOCK_DIR.
     #
 
+    if [ "$MODE" = "status" ]
+    then 
+        return 1
+    fi
+
     INPUTFILES=`list_all_input_items`
     RES=`exec_cmd "ls -1 $ITEM_LOCK_DIR"`   
     rm "$LISTOFITEMS"
-
 
     for x in $INPUTFILES
     do
@@ -1638,7 +1646,7 @@ remove_processed_items_from_input_file () {
 
 get_list_of_new_items () {
 
-
+    echo
 }
 
 get_all_items () {
