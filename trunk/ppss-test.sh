@@ -245,8 +245,8 @@ testUserInputFile () {
     init_vars > /dev/null 2>&1
     get_all_items    
     RESULT=`return_all_items`
-    echo "- $RESULT"
-
+    ORIGINAL=`cat $INPUT_FILE`
+    assertEquals "User input processing not ok." "$RESULT" "$ORIGINAL"
     rename-ppss-dir $FUNCNAME
 }
 
