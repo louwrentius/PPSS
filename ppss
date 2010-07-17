@@ -1658,7 +1658,6 @@ remove_processed_items_from_input_file () {
         fi
     done
     IFS="$oldIFS"
-    echo "$UNPROCESSED_ITEMS"
     echo "$UNPROCESSED_ITEMS" > "$LISTOFITEMS"
 }
 
