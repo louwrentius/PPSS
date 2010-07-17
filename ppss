@@ -1529,10 +1529,6 @@ lock_item () {
     log DEBUG "Locking item $ITEM_LOCK_FILE"
     exec_cmd "mkdir $ITEM_LOCK_FILE >> /dev/null 2>&1"
     ERROR="$?"
-    if [ "$ERROR" = "0" ]
-    then
-        exec_cmd "echo "$ITEM" > $ITEM_LOCK_FILE/item.txt"
-    fi
     return "$ERROR"
 }
 
@@ -1567,10 +1563,14 @@ release_input_lock () {
 
 list_all_input_items () {
 
-    for x in `cat $LISTOFITEMS`
+    oldIFS=$IFS # save the field separator
+    IFS=$'\n' # new field separator, the end of line  
+
+    while read line 
     do
-        echo "$x"
-    done
+        echo "$line"
+    done < "$LISTOFITEMS"
+    IFS="$oldIFS"
 }
 
 return_difference_between_vars () {
@@ -1607,6 +1607,11 @@ remove_processed_items_from_input_file () {
     #
     UNPROCESSED_ITEMS=""
 
+    if [ -z "$PROCESSED_ITEMS" ]
+    then
+        return 1
+    fi
+
     if [ "$MODE" = "status" ]
     then 
         return 1
@@ -1626,7 +1631,11 @@ remove_processed_items_from_input_file () {
     fi
 
     INPUTFILES=`list_all_input_items`
-    log DEBUG "$PROCESSED_ITEMS"
+    log DEBUG "->> $INPUTFILES"
+    log DEBUG "-<< $PROCESSED_ITEMS"
+
+    oldIFS=$IFS # save the field separator
+    IFS=$'\n' # new field separator, the end of line  
 
     for x in $INPUTFILES
     do
@@ -1648,6 +1657,8 @@ remove_processed_items_from_input_file () {
             log DEBUG "ITEM $x is already processed!."
         fi
     done
+    IFS="$oldIFS"
+    echo "$UNPROCESSED_ITEMS"
     echo "$UNPROCESSED_ITEMS" > "$LISTOFITEMS"
 }
 
