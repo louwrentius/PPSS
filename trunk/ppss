@@ -1631,8 +1631,6 @@ remove_processed_items_from_input_file () {
     fi
 
     INPUTFILES=`list_all_input_items`
-    log DEBUG "->> $INPUTFILES"
-    log DEBUG "-<< $PROCESSED_ITEMS"
 
     oldIFS=$IFS # save the field separator
     IFS=$'\n' # new field separator, the end of line  
@@ -2128,7 +2126,7 @@ run_command () {
     
     log DEBUG "Current active workers is $ACTIVE_WORKERS"
 
-    if [ "$ACTIVE_WORKERS" -le "$MAX_NO_OF_RUNNING_JOBS" ]
+    if [ "$ACTIVE_WORKERS" -lt "$MAX_NO_OF_RUNNING_JOBS" ]
     then
         if [ -z "$INPUT" ]
         then
@@ -2149,9 +2147,9 @@ run_command () {
             log DEBUG "Item is a directory or empty."
             return 1
         fi
-     else
-          log DEBUG "Strange, this message should never be displaed." 
-     fi
+    else
+        log DEBUG "Maximum number of workers are bussy, no more additional workers..."
+    fi
 }
 
 display_jobs_remaining () {
@@ -2338,10 +2336,9 @@ listen_for_job () {
     do
         log DEBUG "Current active workers is $ACTIVE_WORKERS"
 
-        decrease_active_workers
-
         if [ "$event" = "$START_KEY" ]
         then
+            decrease_active_workers
             log DEBUG "Got a 'start-key' event"
 
             if [ "$DAEMON" = "0" ]
@@ -2361,7 +2358,6 @@ listen_for_job () {
                 fi
             else
                 log DEBUG "Daemon mode: a worker finished..."
-                decrease_active_workers
                 run_command
             fi
 
