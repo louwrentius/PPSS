@@ -2593,8 +2593,6 @@ main () {
                         for NODE in `cat $NODES_FILE`
                         do
                             start_ppss_on_node "$NODE"
-                            echo "REMOVE THIS DEBUGGING CODE"
-                            sleep 5
                         done
                     fi
                     cleanup
