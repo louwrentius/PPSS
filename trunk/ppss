@@ -77,7 +77,7 @@ PROCESSORS=""
 START_KEY="$RANDOM$RANDOM$RANDOM"
 KILL_KEY="$RANDOM$RANDOM$RANDOM"                        # This is a signal to stop immediately and kill
 QUEUE=""
-INOTIFY=0
+INOTIFY=""
 RECURSION="1"                                           # all running processes.
 START_PPSS=""
 STOP_PPSS=""
@@ -452,7 +452,7 @@ is_var_empty () {
 
 detect_inotify () {
 
-    if [ -e /usr/bin/inotifywait ]
+    if [ -e /usr/bin/inotifywait ] && [ ! "$INOTIFY" = "0" ]
     then
         INOTIFY=1
     fi
@@ -542,6 +542,10 @@ process_arguments () {
                             MAX_DELAY="$2"
                             add_var_to_config MAX_DELAY "$MAX_DELAY"
                             shift 2 ;;
+        --disable-inotify)
+                            INOTIFY=0
+                            add_var_to_config INOTIFY "$INOTIFY"
+                            shift 1 ;;
                  --daemon)
                             DAEMON="1"
                             QUIET="1"
