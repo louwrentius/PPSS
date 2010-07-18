@@ -87,6 +87,8 @@ PROCESSED_ITEMS=""
 UNPROCESSED_ITEMS=""
 ACTIVE_WORKERS="0"
 DAEMON_POLLING_INTERVAL="10"
+STAT=""
+DAEMON_FILE_AGE="4"
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -553,6 +555,10 @@ process_arguments () {
                             DAEMON_POLLING_INTERVAL="$2"
                             add_var_to_config DAEMON_POLLING_INTERVAL "$DAEMON_POLLING_INTERVAL"
                             shift 2 ;;
+                 --file-age)
+                            is_var_empty "$2"
+                            add_var_to_config DAEMON_FILE_AGE "$DAEMON_FILE_AGE"
+                            shift 2 ;;
           --awskeypair|-P)
                 AWS_KEYPAIR="$2"
                 add_var_to_config AWS_KEYPAIR "$AWS_KEYPAIR"
@@ -787,6 +793,30 @@ set_md5 () {
     fi
 }
 
+set_stat () {
+
+    if [ "$DAEMON" = "1" ] && [ "$INOTIFY" = "0" ]
+    then
+        case $ARCH in
+            "Darwin")  STAT="stat -f%m" ;;
+            "FreeBSD") STAT="stat -f%m" ;;
+            "SunOS")   STAT="gstat -c%Y" ;;
+            "Linux")   STAT="stat -c%Y" ;;
+        esac
+
+        $STAT . >> /dev/null 2>&1
+        if [ ! "$?" ]
+        then
+            LOG ERROR "ERROR - PPSS daemon mode requires stat. It may not be within the path or installed."
+            return 1
+        else
+            return 0 
+        fi
+    else
+        return 0
+    fi
+}
+
 log () {
     
     #
@@ -849,6 +879,10 @@ init_vars () {
     # Check if MD5(SUM) is present on the system.
     #
     set_md5
+    #
+    # Chec if stat is present and works on the system if daemon mode is enabled.
+    #
+    set_stat
 
     #
     # Is PPSS run as a daemon? Then use input locking, which is not required otherwise.
@@ -1072,7 +1106,12 @@ stack_pop () {
     done
     STACK="$TMP_STACK"
     REGISTER="$tmp"
-    log DEBUG "Stack is $STACK"
+    if [ -z "$REGISTER" ]
+    then
+        return 1
+    else
+        return 0
+    fi
 }     
 
 ec2_get_pending_nodes() {
@@ -2261,6 +2300,44 @@ is_item_unprocessed () {
     return $STATUS
 }
 
+
+is_item_file_and_unmodified () {
+
+    ITEM="$1"
+
+    if [ -e "$ITEM" ]
+    then
+        NOW=`date +%s`
+        FILEDATE=`$STAT "$ITEM"`
+        ELAPSED="$(expr $NOW - $FILEDATE)"
+        if [ "$ELAPSED" -gt "$DAEMON_FILE_AGE" ]
+        then
+            log DEBUG "$FUNCNAME File $ITEM is aged $ELAPSED"
+            return 0
+        else
+            log DEBUG "$FUNCNAME File $ITEM too young $ELAPSED"
+            return 1
+        fi
+    else
+        return 0
+    fi
+}
+
+process_item_as_daemon () {
+
+    ITEM="$1"
+    if is_item_unprocessed "$ITEM"
+    then
+        if is_item_file_and_unmodified "$ITEM"
+        then
+            echo "$ITEM" >> "$FIFO"
+            processed_stack_push "$ITEM"
+        else
+            stack_push "$ITEM"
+        fi
+    fi
+}
+
 daemon_listener () {
 
     while true
@@ -2268,13 +2345,11 @@ daemon_listener () {
         get_all_items
         while get_item
         do
-            if is_item_unprocessed "$ITEM"
-            then
-                log DEBUG "Daemon sending item $ITEM to fifo."
-                echo "$ITEM" >> "$FIFO"
-                processed_stack_push "$ITEM"
-                log DEBUG "Processed items is $PROCESSED_ITEMS"
-            fi
+            process_item_as_daemon "$ITEM"
+        done
+        while stack_pop
+        do 
+            process_item_as_daemon "$REGISTER"  
         done
         sleep "$DAEMON_POLLING_INTERVAL"
     done
@@ -2339,6 +2414,7 @@ listen_for_job () {
         if [ "$event" = "$START_KEY" ]
         then
             decrease_active_workers
+
             log DEBUG "Got a 'start-key' event"
 
             if [ "$DAEMON" = "0" ]
@@ -2368,7 +2444,6 @@ listen_for_job () {
         else
             log DEBUG "Event is an item!"
             stack_push "$event"
-            log DEBUG "stack after push is $STACK"
             run_command
         fi
         display_progress
