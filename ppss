@@ -1561,14 +1561,19 @@ upload_item () {
 }
 
 lock_item () {
-    
-    ITEM="$1"
-    LOCK_FILE_NAME_MD5=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
-    ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME_MD5"
-    log DEBUG "Locking item $ITEM_LOCK_FILE"
-    exec_cmd "mkdir $ITEM_LOCK_FILE >> /dev/null 2>&1"
-    ERROR="$?"
-    return "$ERROR"
+
+    if [ "$INOTIFY" = "1" ] && [ "$DAEMON" = "1" ]
+    then
+        return 0
+    else
+        ITEM="$1"
+        LOCK_FILE_NAME_MD5=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
+        ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME_MD5"
+        log DEBUG "Locking item $ITEM_LOCK_FILE"
+        exec_cmd "mkdir $ITEM_LOCK_FILE >> /dev/null 2>&1"
+        ERROR="$?"
+        return "$ERROR"
+    fi
 }
 
 get_input_lock () {
@@ -2173,6 +2178,8 @@ run_command () {
             INPUT="$REGISTER"
         fi
 
+        log DEBUG "Now processing $INPUT"
+
         if [ ! -d "$INPUT" ] && [ ! -z "$INPUT" ]
         then
             commando "$INPUT" &
@@ -2272,7 +2279,10 @@ inotify_listener () {
     inotifywait "$SRC_DIR" -m -e close -q --format '%w%f' | \
     while read -r line
     do
-        echo "$line" > "$FIFO"
+        if [ ! -d "$line" ]
+        then
+            echo "$line" > "$FIFO"
+        fi
     done
 }
 
@@ -2299,7 +2309,6 @@ is_item_unprocessed () {
     
     return $STATUS
 }
-
 
 is_item_file_and_unmodified () {
 
@@ -2434,7 +2443,7 @@ listen_for_job () {
                 fi
             else
                 log DEBUG "Daemon mode: a worker finished..."
-                run_command
+                run_command 
             fi
 
         elif [ "$event" == "$KILL_KEY" ]
@@ -2442,7 +2451,7 @@ listen_for_job () {
             infanticide
             break
         else
-            log DEBUG "Event is an item!"
+            log DEBUG "Event $event is an item!"
             stack_push "$event"
             run_command
         fi
