@@ -26,7 +26,7 @@
 trap 'kill_process' SIGINT 
 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.83"
+SCRIPT_VERSION="2.84"
 
 #
 # The first argument to this script can be a mode.
@@ -90,11 +90,12 @@ DAEMON_POLLING_INTERVAL="10"
 STAT=""
 DAEMON_FILE_AGE="4"
 ENABLE_INPUT_LOCK="0"
+PROCESSING_TIME=""
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
 SSH_KNOWN_HOSTS=""
-SSH_SOCKET="/tmp/ppss_ssh_socket-$$"          # Multiplex multiple SSH connections over 1 master.
+SSH_SOCKET="$PPSS_DIR/ppss_ssh_socket-$$"          # Multiplex multiple SSH connections over 1 master.
 SSH_OPTS="-o BatchMode=yes -o ControlPath=$SSH_SOCKET \
                            -o GlobalKnownHostsFile=./known_hosts \
                            -o ControlMaster=auto \
@@ -427,7 +428,7 @@ check_for_interrupt () {
     does_file_exist "$PAUSE_SIGNAL"
     if [ "$?" = "0" ]
     then
-        set_status "PAUZED"
+        set_status "PAUSED"
         log INFO "PAUSE: sleeping for $PAUSE_DELAY SECONDS."
         sleep $PAUSE_DELAY
         check_for_interrupt
@@ -479,6 +480,8 @@ detect_inotify () {
     if [ -e /usr/bin/inotifywait ] && [ ! "$INOTIFY" = "0" ]
     then
         INOTIFY=1
+    else
+        INOTIFY=0
     fi
 }
 
@@ -941,7 +944,7 @@ init_vars () {
         MIN_JOBS=3
     fi
 
-    FIFO=/tmp/ppss-fifo-$RANDOM-$RANDOM
+    FIFO="$PPSS_DIR"/ppss-fifo-$RANDOM-$RANDOM
 
     if [ ! -e "$FIFO" ]
     then    
@@ -1031,12 +1034,6 @@ init_vars () {
         mkdir "$PPSS_LOCAL_OUTPUT"
     fi
 
-}
-
-get_status () {
-
-    STATUS=`cat "$NODE_SATUS"`
-    echo "$STATUS"
 }
 
 set_status () {
@@ -1277,7 +1274,7 @@ deploy_ppss () {
     if [ ! -e "$NODES_FILE" ]
     then
         log ERROR "File $NODES with list of nodes does not exist."
-        set_status ERROR
+        set_status "ERROR"
         cleanup
         exit 1
     else
@@ -1463,7 +1460,7 @@ random_delay () {
     if [ -z "$ARGS" ]
     then
         log ERROR "$FUNCNAME Function random delay, no argument specified."
-        set_status ERROR
+        set_status "ERROR"
         exit 1
     fi
 
@@ -1740,9 +1737,10 @@ get_all_items () {
 
     if [ "$DAEMON" == "1" ] && [ "$INOTIFY" = "0" ]  && [ "$ENABLE_INPUT_LOCK" = "1" ]
     then
-        GLOBAL_COUNTER=1
         get_input_lock
     fi
+
+    GLOBAL_COUNTER=1
     
     if [ -e "$LISTOFITEMS" ] 
     then
@@ -1826,7 +1824,7 @@ get_all_items () {
     if [ "$SIZE_OF_INPUT" -le "0" ] && [ "$DAEMON" = "0" ]
     then
         log ERROR "Source file/dir seems to be empty."
-        set_status STOPPED
+        set_status "STOPPED"
         cleanup
         exit 1
     fi
@@ -1874,7 +1872,8 @@ get_item () {
     if [ -z "$ITEM" ]
     then
         log DEBUG "Item was emtpy..."
-        return 1
+        ((GLOBAL_COUNTER++))
+        get_item
     else
         ((GLOBAL_COUNTER++))
 
@@ -1913,6 +1912,7 @@ stop-ppss () {
 
     STOP_PPSS=`get_time_in_seconds`
     elapsed "$START_PPSS" "$STOP_PPSS"
+    log DSPLY "$PROCESSING_TIME"
 }
 
 elapsed () {
@@ -1928,8 +1928,7 @@ elapsed () {
     SECS="$(expr $REMAINDER % 60)"
     MINS="$(expr $(expr $REMAINDER - $SECS) / 60)"
 
-    RES=$(printf "Total processing time (hh:mm:ss): %02d:%02d:%02d" $HOURS $MINS $SECS)
-    echo "$RES"
+    PROCESSING_TIME=$(printf "Total processing time (hh:mm:ss): %02d:%02d:%02d" $HOURS $MINS $SECS)
 }
 
 mail_on_error () {
@@ -2165,7 +2164,9 @@ commando () {
     # Upload the log file to the server.
     #
 
-    elapsed "$BEFORE" "$AFTER" >> "$ITEM_LOG_FILE"
+    elapsed "$BEFORE" "$AFTER" 
+    echo "$PROCESSING_TIME" >> "$ITEM_LOG_FILE"
+    
     echo -e "" >> "$ITEM_LOG_FILE"
 
     if [ ! -z "$SSH_SERVER" ]
@@ -2270,22 +2271,36 @@ show_eta () {
     TOTAL="$SIZE_OF_INPUT"
     START_TIME=$START_PPSS
     NOW=`get_time_in_seconds`
+    MODULO=$((GLOBAL_COUNTER % 5 ))
 
-    if [ "$CURRENT_PROCESSED" -le "0" ]
+    if [ "$QUIET" = "1" ]
+    then
+        return 0
+    fi
+
+    if [ "$CURRENT_PROCESSED" -le "0" ] 
     then 
         return 0
     else
-        TIME_PER_ITEM=$(( (NOW-START_TIME)/CURRENT_PROCESSED ))
-        TOTAL_TIME=$(( ($TIME_PER_ITEM * SIZE_OF_INPUT) + $TIME_PER_ITEM ))
-        TOTAL_TIME_IN_SECONDS=$((START_TIME+TOTAL_TIME))
-        if [ "$ARCH" = "Darwin" ]
+        if [ "$MODULO" = "0" ]
         then
-            DATE=`date -r $TOTAL_TIME_IN_SECONDS`
-        else
-            DATE=`date -d @$TOTAL_TIME_IN_SECONDS`
+            RUNNING_TIME=$((NOW-START_TIME))
+            if [ ! "$RUNNING_TIME" -le "0" ] && [ ! "$CURRENT_PROCESSED" = "0" ] && [ "$CURRENT_PROCESSED" -gt "$MAX_NO_OF_RUNNING_JOBS" ]
+            then
+                TIME_PER_ITEM=$(( RUNNING_TIME / ( CURRENT_PROCESSED - MAX_NO_OF_RUNNING_JOBS ) )) 
+                TOTAL_TIME=$(( ($TIME_PER_ITEM * SIZE_OF_INPUT) + $TIME_PER_ITEM ))
+                TOTAL_TIME_IN_SECONDS=$((START_TIME+TOTAL_TIME))
+                if [ "$ARCH" = "Darwin" ]
+                then
+                    DATE=`date -r $TOTAL_TIME_IN_SECONDS`
+                else
+                    DATE=`date -d @$TOTAL_TIME_IN_SECONDS`
+                fi
+                echo
+                log DSPLY "ETA: $DATE"
+                echo -en "\033[2A"
+            fi
         fi
-        echo
-        log DSPLY "ETA: $DATE"
     fi
 }
 
@@ -2299,18 +2314,18 @@ display_progress () {
         then
             if [ "$QUIET" == "0" ]
             then
-                log PRCNT "Currently $PERCENT percent complete. Processed $GLOBAL_COUNTER of $SIZE_OF_INPUT items." 
+                log PRCNT "Currently $PERCENT percent complete. Processed $GLOBAL_COUNTER of $SIZE_OF_INPUT." 
                 show_eta
             elif [ "$DAEMON" == "0" ]
             then
-                echo -en "\r$PERCENT%"
+                echo -en "\r$PERCENT% --"
             fi
 
             if [ "$PERCENT" == "100" ]
             then
                 if [ "$QUIET" == "1" ]
                 then
-                    echo 
+                    echo
                 fi
                 FINISHED=1
             fi
@@ -2329,7 +2344,7 @@ terminate_listener () {
         log DEBUG "SSH master PID is empty."
     fi 
 
-    set_status STOPPED
+    set_status "STOPPED"
     log DEBUG "Listener stopped."
 
     if [ ! "$PERCENT" == "100" ]
@@ -2414,6 +2429,7 @@ is_item_file_and_unmodified () {
             return 1
         fi
     else
+        log DEBUG "$FUNCNAME: file does not exist."
         return 0
     fi
 }
@@ -2668,7 +2684,7 @@ main () {
                     if [ ! -e "$NODES_FILE" ]
                     then
                         log ERROR "File $NODES with list of nodes does not exist."
-                        set_status STOPPED
+                        set_status "STOPPED"
                         cleanup
                         exit 1
                     else
