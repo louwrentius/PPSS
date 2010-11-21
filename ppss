@@ -26,7 +26,7 @@
 trap 'kill_process' SIGINT 
 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.84"
+SCRIPT_VERSION="2.85"
 
 #
 # The first argument to this script can be a mode.
@@ -83,6 +83,7 @@ START_PPSS=""
 STOP_PPSS=""
 SIZE_OF_INPUT=""
 LOCAL_LOCKING="1"
+LIST_OF_PROCESSED_ITEMS="$PPSS_DIR/LIST_OF_PROCESSED_ITEMS"
 PROCESSED_ITEMS=""
 UNPROCESSED_ITEMS=""
 ACTIVE_WORKERS="0"
@@ -475,9 +476,52 @@ is_var_empty () {
     fi
 }
 
+detect_source_dir_nfs_exported () {
+    
+    log DEBUG "Executing $FUNCNAME"
+
+    if [ -e /etc/exports ]
+    then
+        log DEBUG "NFS /etc/exports found."
+        NFS=0
+        EXPORTS=`cat /etc/exports | grep ^/ | awk '{ print $1 }'`
+        
+        for export in $EXPORTS
+        do
+            #
+            # If this for loop matches anything, the SRC_DIR is NFS exported.
+            # inotify does not play well with NFS. So it must be disabled.
+            #
+            DIRECTORY=`dirname "$SRC_DIR"`
+            while true
+            do
+                if [ ! "$DIRECTORY" = "/" ] && [ ! "$DIRECTORY" = "." ]
+                then
+                    if [ "$export" = "$DIRECTORY" ]
+                    then
+                        NFS=1
+                        break
+                    fi
+                else
+                    break
+                fi
+                DIRECTORY=`dirname "$DIRECTORY"`
+            done
+        done
+    fi
+    if [ "$NFS" = "1" ]
+    then
+        log INFO "Source directory is NFS exported. Disabling inotify."
+        return 1
+    else
+        log INFO "Source directory is NOT NFS exported. Enabling inotify."
+        return 0
+    fi 
+}
+
 detect_inotify () {
 
-    if [ -e /usr/bin/inotifywait ] && [ ! "$INOTIFY" = "0" ]
+    if [ -e /usr/bin/inotifywait ] && [ ! "$INOTIFY" = "0" ] && detect_source_dir_nfs_exported
     then
         INOTIFY=1
     else
@@ -882,8 +926,13 @@ log () {
     PREFIX="$DATE: ${TYPE_EXP:0:$TYPE_LENGTH}"
     PREFIX_SMALL="$DATE: "
 
+    if [ ! "$TYPE" = "ERROR" ]
+    then
+        ECHO_MSG="$PREFIX_SMALL $MESG"
+    else
+        ECHO_MSG="$PREFIX_SMALL [ERROR] $MESG"
+    fi
     LOG_MSG="$PREFIX $MESG"
-    ECHO_MSG="$PREFIX_SMALL $MESG"
 
     if [ ! -z "$PPSS_DEBUG" ] && [ ! "$PPSS_DEBUG" == "0" ]
     then
@@ -1681,16 +1730,25 @@ remove_processed_items_from_input_file () {
     #
     UNPROCESSED_ITEMS=""
 
+    if [ -e "$LIST_OF_PROCESSED_ITEMS" ]
+    then
+        PROCESSED_ITEMS=`cat $LIST_OF_PROCESSED_ITEMS`
+    fi
+
+    log DEBUG "Running $FUNCNAME"
+
     if [ -z "$PROCESSED_ITEMS" ]
     then
+        log DEBUG "Variable processed_items is empty."
         return 1
     fi
 
     if [ "$MODE" = "status" ]
     then 
+        log DEBUG "Mode is status."
         return 1
     fi
-    log DEBUG "Running $FUNCNAME...."
+
     if [ ! -e "$LISTOFITEMS" ]
     then
         echo "$LISTOFITEMS does not exist!"
@@ -1708,6 +1766,8 @@ remove_processed_items_from_input_file () {
 
     oldIFS=$IFS # save the field separator
     IFS=$'\n' # new field separator, the end of line  
+
+    log DEBUG "Now removing processed items from input."
 
     for x in $INPUTFILES
     do
@@ -1788,7 +1848,7 @@ get_all_items () {
                 ITEMS=""
             fi
         fi
-    else
+    else  # Using an input file as the source of our items or STDIN.
         if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
         then
             log DEBUG "Running as node, input file has been pushed (hopefully)."
@@ -1812,7 +1872,18 @@ get_all_items () {
                 echo "$LINE" >> "$LISTOFITEMS"
             done
         fi
+
+        if [ ! -e "$LISTOFITEMS" ]
+        then
+            log ERROR "Input is empty."
+            infanticide
+            terminate_listener
+            cleanup
+            exit 1
+        fi
     fi
+
+    remove_processed_items_from_input_file
 
     if [ "$DAEMON" == "1" ]
     then
@@ -1821,6 +1892,11 @@ get_all_items () {
 
     SIZE_OF_INPUT=$(wc -l "$LISTOFITEMS" | awk '{ print $1 }')
 
+    #if [ "$SIZE_OF_INPUT" -eq "1" ]
+    #then
+    #    MAX_NO_OF_RUNNING_JOBS=1
+    #fi
+
     if [ "$SIZE_OF_INPUT" -le "0" ] && [ "$DAEMON" = "0" ]
     then
         log ERROR "Source file/dir seems to be empty."
@@ -1828,7 +1904,7 @@ get_all_items () {
         cleanup
         exit 1
     fi
-    remove_processed_items_from_input_file
+
 }
 
 get_item () {
@@ -2183,6 +2259,8 @@ commando () {
 }
 
 infanticide () {
+    
+    log DEBUG "Running $FUNCNAME"
 
     #
     # This code is run if ctrl+c is pressed. Very important to prevent
@@ -2232,7 +2310,7 @@ run_command () {
 
         log INFO "Now processing $INPUT"
 
-        if [ ! -d "$INPUT" ] && [ ! -z "$INPUT" ]
+        if [ ! -z "$INPUT" ] && [ ! -d "$INPUT" ]
         then
             commando "$INPUT" &
             MYPID="$!"
@@ -2240,10 +2318,11 @@ run_command () {
             PIDS="$PIDS $MYPID"
             ((ACTIVE_WORKERS++))
             log DEBUG "Increasing active workers to $ACTIVE_WORKERS"
+            echo "$INPUT" >> "$LIST_OF_PROCESSED_ITEMS"
             return 0
         else
-            log DEBUG "Item is a directory or empty."
-            return 1
+            log DEBUG "Item is a directory or is empty."
+            return 0
         fi
     else
         log DEBUG "Maximum number of workers are bussy, no more additional workers..."
@@ -2288,6 +2367,7 @@ show_eta () {
             if [ ! "$RUNNING_TIME" -le "0" ] && [ ! "$CURRENT_PROCESSED" = "0" ] && [ "$CURRENT_PROCESSED" -gt "$MAX_NO_OF_RUNNING_JOBS" ]
             then
                 TIME_PER_ITEM=$(( RUNNING_TIME / ( CURRENT_PROCESSED - MAX_NO_OF_RUNNING_JOBS ) )) 
+                log DEBUG "Time per item is $TIME_PER_ITEM seconds."
                 TOTAL_TIME=$(( ($TIME_PER_ITEM * SIZE_OF_INPUT) + $TIME_PER_ITEM ))
                 TOTAL_TIME_IN_SECONDS=$((START_TIME+TOTAL_TIME))
                 if [ "$ARCH" = "Darwin" ]
@@ -2335,7 +2415,7 @@ display_progress () {
 
 terminate_listener () {
 
-    log DEBUG "Terminating listener."
+    log DEBUG "Running $FUNCNAME"
 
     if [ ! -z "$SSH_MASTER_PID" ]
     then
@@ -2520,6 +2600,7 @@ listen_for_job () {
 
     while read event <& 42
     do
+        display_progress
         log INFO "Current active workers is $ACTIVE_WORKERS"
 
         if [ "$event" = "$START_KEY" ]
@@ -2557,7 +2638,6 @@ listen_for_job () {
             stack_push "$event"
             run_command
         fi
-        display_progress
     done
 
     terminate_listener
