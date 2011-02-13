@@ -26,7 +26,7 @@
 trap 'kill_process' SIGINT 
 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.85"
+SCRIPT_VERSION="2.86"
 
 #
 # The first argument to this script can be a mode.
@@ -119,7 +119,7 @@ REMOTE_OUTPUT_DIR=""                    # Remote directory to which output must 
 SCRIPT=""                               # Custom user script that is executed by ppss.
 ITEM_ESCAPED=""
 DISABLE_SKIPPING=0
-NODE_STATUS="$PPSS_DIR/status.txt"
+NODE_STATUS="$PPSS_DIR/$HOSTNAME-status.txt"
 DAEMON=0
 EMAIL=""
 
@@ -372,6 +372,11 @@ exec_cmd () {
     STATUS=""
     CMD="$1"
     NOMP="$2" # Disable multiplexing.
+
+    if [[ "$ARCH" == "FreeBSD" ]]
+    then
+        CMD="bash $CMD"
+    fi
 
     if [ ! -z "$SSH_SERVER" ] 
     then
@@ -2677,7 +2682,8 @@ start_all_workers () {
 get_status_of_node () {
 
     NODE="$1"
-    STATUS=`ssh -o ConnectTimeout=10 $SSH_KEY $USER@$NODE cat "$PPSS_HOME_DIR/$NODE_STATUS" 2>/dev/null`
+    NODE_HOSTNAME=`ssh -o ConnectTimeout=10 $SSH_KEY $USER@NODE hostname`
+    STATUS=`ssh -o ConnectTimeout=10 $SSH_KEY $USER@$NODE cat "$PPSS_HOME_DIR/$NODE_HOSTNAME-status.txt" 2>/dev/null`
     ERROR="$?"
     if [ ! "$ERROR" == "0" ]
     then
