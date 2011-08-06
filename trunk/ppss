@@ -26,12 +26,12 @@
 trap 'kill_process' SIGINT 
 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.86"
+SCRIPT_VERSION="2.90"
 
 #
 # The first argument to this script can be a mode.
 #
-MODES="node start config stop pause continue deploy status erase kill ec2"
+MODES="node start config stop pause continue deploy status erase kill"
 for x in $MODES
 do
     if [ "$x" == "$1" ]
@@ -92,6 +92,7 @@ STAT=""
 DAEMON_FILE_AGE="4"
 ENABLE_INPUT_LOCK="0"
 PROCESSING_TIME=""
+NODE_ID="NODE_ID"
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -119,7 +120,8 @@ REMOTE_OUTPUT_DIR=""                    # Remote directory to which output must 
 SCRIPT=""                               # Custom user script that is executed by ppss.
 ITEM_ESCAPED=""
 DISABLE_SKIPPING=0
-NODE_STATUS="$PPSS_DIR/$HOSTNAME-status.txt"
+PPSS_NODE_STATUS="$PPSS_DIR/NODE_STATUS"
+NODE_STATUS_FILE="$PPSS_NODE_STATUS/$HOSTNAME-status.txt"
 DAEMON=0
 EMAIL=""
 
@@ -221,7 +223,6 @@ showusage_long () {
     echo " config       Generate a config file based on the supplied option parameters."
     echo " deploy       Deploy PPSS and related files on the specified nodes."
     echo " erase        Erase PPSS and related files from the specified nodes."
-    echo " ec2          Start up Amazon EC2 instances and deploy PPSS on nodes."
     echo
     echo " start        Starting PPSS on nodes."
     echo " pause        Pausing PPSS on all nodes."
@@ -1088,13 +1089,36 @@ init_vars () {
         mkdir "$PPSS_LOCAL_OUTPUT"
     fi
 
+    if [ ! -e "$PPSS_NODE_STATUS" ]
+    then
+        mkdir -p "$PPSS_NODE_STATUS"
+    fi
+
+}
+
+upload_status () {
+
+    scp -q $SSH_OPTS $SSH_KEY $NODE_STATUS_FILE $USER@$SSH_SERVER:$PPSS_HOME_DIR/$PPSS_NODE_STATUS/
+    if [ "$?" == "0" ]
+    then
+        log DEBUG "Uploaded status to server ok."
+    else
+        log DEBUG "Uploaded status to server failed."
+    fi
 }
 
 set_status () {
 
     STATUS="$1"
-    echo "$HOSTNAME $STATUS" > "$NODE_STATUS"
+    NO_PROCESSED=$(wc -l "$PPSS_HOME_DIR/$LIST_OF_PROCESSED_ITEMS" | cut -d " " -f 1)
+    NODE=`cat $PPSS_DIR/$NODE_ID`
+    echo "$NODE $HOSTNAME $STATUS $NO_PROCESSED" > "$NODE_STATUS_FILE"
+    if [ ! -z "$SSH_SERVER" ]
+    then
+        upload_status
+    fi
 }
+
 
 check_status () {
 
@@ -1202,47 +1226,36 @@ stack_pop () {
     fi
 }     
 
-ec2_get_pending_nodes() {
-    #
-    # This function has naver been tested by the author of PPSS.
-    #
-    RES="$(ec2-describe-instances | grep 'INSTANCE' | awk '{print $4}'| grep pending)"
-    echo "$RES"
-}
+is_screen_installed () {
 
-ec2_launch_nodes() {
-    #
-    # This function has naver been tested by the author of PPSS.
-    #
-    ec2run $AMI_ID -n $NUM_NODES -t $INSTANCE_TYPE -k $AWS_KEYPAIR -g $SECURITY_GROUP  
+    if [ "$DISABLE_SCREEN_TEST" == "1" ]    
+    then
+        return 0
+    fi
 
-    #
-    # Loop until all nodes are started
-    #
-    STARTING="`ec2_get_pending_nodes`"
-    while [ ! -z "$STARTING" ]
-    do
-        sleep 10
-        STARTING="`ec2_get_pending_nodes`"
-        log DSPLY "$STARTING"
-    done
-    #
-    # Write all instances / nodes to the nodes file.
-    #
-    ec2-describe-instances | grep 'INSTANCE' | awk '{print $4}' | sed '/terminated/d' | sed '/pending/d' >> $NODES_FILE
-    NO_OF_NODES="`wc -l $NODES_FILE | awk '{ print $1 }'`"
-    log DSPLY "Number of nodes / instances: $NO_OF_NODES"
+    NODE="$1"
+    ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "screen -m -D -S test ls" > /dev/null 2>&1 
+    if [ ! "$?" == "0" ]
+    then
+        log ERROR "The 'Screen' command is not installed on node $NODE."
+        return 1
+    else
+        log DEBUG "'Screen' is installed on node $NODE."
+    fi
 }
 
 deploy () {
 
     NODE="$1"
 
-    SSH_OPTS_NODE="-o BatchMode=yes -o ControlPath=socket-%h \
+    SSH_SOCKET="ppss_ssh_socket-$NODE"
+
+    SSH_OPTS_NODE="-o BatchMode=yes -o ControlPath=$SSH_SOCKET \
                            -o GlobalKnownHostsFile=./known_hosts \
                            -o ControlMaster=auto \
                            -o Cipher=blowfish \
                            -o ConnectTimeout=5 "
+
     ERROR=0
     set_error () {
 
@@ -1252,20 +1265,15 @@ deploy () {
         fi
     }
 
-    ssh -q -o ConnectTimeout=5 $SSH_KEY $USER@$NODE exit 0
-    set_error "$?"
-    if [ ! "$ERROR" == "0" ]
-    then
-        log ERROR "Cannot connect to node $NODE."
-        return 
-    fi
-
     ssh -N -M $SSH_OPTS_NODE $SSH_KEY $USER@$NODE &
     SSH_PID=$!
 
+    is_screen_installed "$NODE"
+
     KEY=`echo $SSH_KEY | cut -d " " -f 2` 
 
-    ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "cd ~ && mkdir $PPSS_HOME_DIR >> /dev/null 2>&1" 
+    ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "cd ~ && mkdir -p $PPSS_HOME_DIR && mkdir -p $PPSS_HOME_DIR/$JOB_LOG_DIR && mkdir -p $PPSS_HOME_DIR/ITEM_LOCK_DIR >> /dev/null 2>&1" 
+    ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "cd ~ && cd $PPSS_HOME_DIR && cd $PPSS_DIR && echo $NODE > $NODE_ID"
     scp -q $SSH_OPTS_NODE $SSH_KEY $0 $USER@$NODE:~/$PPSS_HOME_DIR
     set_error $?
     scp -q $SSH_OPTS_NODE $SSH_KEY $KEY $USER@$NODE:~/$PPSS_HOME_DIR
@@ -1274,6 +1282,7 @@ deploy () {
     set_error $?
     scp -q $SSH_OPTS_NODE $SSH_KEY known_hosts $USER@$NODE:~/$PPSS_HOME_DIR
     set_error $?
+
     if [ ! -z "$SCRIPT" ]
     then
         scp -q $SSH_OPTS_NODE $SSH_KEY $SCRIPT $USER@$NODE:~/$PPSS_HOME_DIR
@@ -1298,19 +1307,20 @@ deploy () {
 
 deploy_ppss () {
 
-    
-    if [ -z "$NODES_FILE" ]
+    if [ -z "$NODES_FILE" ] || [ ! -e "$NODES_FILE" ]
     then
-        log ERROR "ERROR - are you using the right option? -C ?"
+        log ERROR "No file containing list of nodes missing / not specified."
         set_status ERROR
         cleanup 
         exit 1
     fi
+
+    exec_cmd "mkdir $PPSS_HOME_DIR/$PPSS_NODE_STATUS"
     
     KEY=`echo $SSH_KEY | cut -d " " -f 2` 
     if [ -z "$KEY" ] || [ ! -e "$KEY" ]
     then
-        log ERROR "Nodes require a key file."
+        log ERROR "Private SSH key $KEY not found."
         cleanup
         set_status "ERROR"
         exit 1
@@ -1325,41 +1335,26 @@ deploy_ppss () {
     fi
 
     INSTALLED_ON_SSH_SERVER=0
-    if [ ! -e "$NODES_FILE" ]
-    then
-        log ERROR "File $NODES with list of nodes does not exist."
-        set_status "ERROR"
-        cleanup
-        exit 1
-    else
-	if [ "$EC2" == "1" ]
-	then
-		ec2_launch_nodes
-	fi
-        for NODE in `cat $NODES_FILE` 
-        do
-            deploy "$NODE" &
-            if [ "$ARCH" == "SunOS" ]
-            then
-                sleep 1
-            else
-                sleep 0.1
-            fi
-            if [ "$NODE" == "$SSH_SERVER" ]
-            then   
-                log DEBUG "SSH SERVER $SSH_SERVER is also a node."
-                INSTALLED_ON_SSH_SERVER=1
-                exec_cmd "mkdir -p $PPSS_HOME_DIR/$JOB_LOG_DIR"
-                exec_cmd "mkdir -p $PPSS_HOME_DIR/$ITEM_LOCK_DIR"
-            fi
-        done
-        if [ "$INSTALLED_ON_SSH_SERVER" == "0" ]
+    for NODE in `cat $NODES_FILE` 
+    do
+        deploy "$NODE" &
+        if [ "$ARCH" == "SunOS" ]
         then
-            log DEBUG "SSH SERVER $SSH_SERVER is not a node."
-            deploy "$SSH_SERVER"
-            exec_cmd "mkdir -p $PPSS_HOME_DIR/$JOB_LOG_DIR"
-            exec_cmd "mkdir -p $PPSS_HOME_DIR/$ITEM_LOCK_DIR"
+            sleep 1
+        else
+            sleep 0.1
         fi
+        if [ "$NODE" == "$SSH_SERVER" ]
+        then   
+            INSTALLED_ON_SSH_SERVER=1
+        fi
+    done
+
+    if [ "$INSTALLED_ON_SSH_SERVER" == "0" ]
+    then
+        log DEBUG "SSH SERVER $SSH_SERVER is not a node."
+    else
+        log DEBUG "SSH SERVER $SSH_SERVER is also a node."
     fi
 }
 
@@ -1367,7 +1362,7 @@ start_ppss_on_node () {
 
     NODE="$1"
     log DSPLY "Starting PPSS on node $NODE."
-    ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
+    ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 -o GlobalKnownHostsFile=./known_hosts "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
 }
 
 test_server () {
@@ -1699,32 +1694,6 @@ list_all_input_items () {
         echo "$line"
     done < "$LISTOFITEMS"
     IFS="$oldIFS"
-}
-
-return_difference_between_vars () {
-
-    VAR_A="$1"
-    VAR_B="$2"
-
-    for a in $VAR_A
-    do
-        A_IS_IN_B=0
-
-        for b in $VAR_B
-        do
-            if [ "$a" = "$b" ]
-            then
-                A_IS_IN_B=1
-            fi
-        done
-
-        if [ "$A_IS_IN_B" = "0" ]
-        then
-            echo "$a"
-        else
-            log DEBUG "Value $a occurs in 'var b'"
-        fi
-    done
 }
 
 remove_processed_items_from_input_file () {
@@ -2679,17 +2648,30 @@ start_all_workers () {
     done
 }
 
+#get_status_of_node () {
+#
+#    NODE="$1"
+#    NODE_HOSTNAME=`ssh $SSH_OPTS_NODE $SSH_KEY $USER@$NODE hostname`
+#    STATUS=`ssh $SSH_OPTS_NODE $SSH_KEY $USER@$NODE cat "$PPSS_HOME_DIR/$PPSS_NODE_STATUS/$NODE_HOSTNAME-status.txt" 2>/dev/null`
+#    echo "STATUS=ssh $SSH_OPTS_NODE $SSH_KEY $USER@$NODE cat $PPSS_HOME_DIR/$PPSS_DIR/$PPSS_NODE_STATUS/$NODE_HOSTNAME-status.txt 2>/dev/null" >> abc.txt
+#    ERROR="$?"
+#    if [ ! "$ERROR" == "0" ]
+#    then
+#        STATUS="UNKNOWN"
+#    fi
+#    echo "$STATUS"
+#}
+
+#get_node_status_from_server () {
 get_status_of_node () {
 
-    NODE="$1"
-    NODE_HOSTNAME=`ssh -o ConnectTimeout=10 $SSH_KEY $USER@NODE hostname`
-    STATUS=`ssh -o ConnectTimeout=10 $SSH_KEY $USER@$NODE cat "$PPSS_HOME_DIR/$NODE_HOSTNAME-status.txt" 2>/dev/null`
-    ERROR="$?"
-    if [ ! "$ERROR" == "0" ]
-    then
-        STATUS="UNKNOWN"
-    fi
-    echo "$STATUS"
+    RES=`ssh $SSH_OPTS $SSH_KEY $USER@$SERVER cat "$PPSS_HOME_DIR/$PPSS_NODE_STATUS/*" 2> /dev/null`
+    IFS=$'\n'
+    for x in $RES
+    do
+        log DSPLY "$x"
+    done    
+
 }
 
 show_status () {
@@ -2706,7 +2688,7 @@ show_status () {
     
     if [ ! -z "$ITEMS" ] && [ ! "$ITEMS" == "0" ]
     then
-        PROCESSED=`exec_cmd "ls -1 $ITEM_LOCK_DIR 2>/dev/null | wc -l" 1` 2>&1 >> /dev/null
+        PROCESSED=`exec_cmd "ls -1 $PPSS_HOME_DIR/$ITEM_LOCK_DIR 2>/dev/null | wc -l" 1` 2>&1 >> /dev/null
         TMP_STATUS=$((100 * $PROCESSED / $ITEMS))
         log DSPLY "Status:\t\t$TMP_STATUS percent complete."
     else
@@ -2720,12 +2702,12 @@ show_status () {
     fi
     log DSPLY "Items:\t\t$ITEMS"
 
-
     log DSPLY "---------------------------------------------------------"
     HEADER=`echo IP-address Hostname Processed Status | awk '{ printf ("%-16s %-18s % 10s %10s\n",$1,$2,$3,$4) }'`  
     log DSPLY "$HEADER"
     log DSPLY "---------------------------------------------------------"
     PROCESSED=0
+
     for x in `cat $NODES_FILE`
     do
         RES=0
@@ -2825,20 +2807,9 @@ main () {
                     exit 0
                     ;;
         deploy )
-                    LOGFILE=/dev/null
+                    LOGFILE=ppss-deploy.txt
                     display_header
-                    log DSPLY "Deploying PPSS on nodes."
-                    deploy_ppss
-                    wait
-                    cleanup
-                    exit 0
-                    ;;
-	        ec2)
-                    EC2=1
-                    LOGFILE=/dev/null
-                    display_header
-                    log INFO "Deploying PPSS on EC2 nodes."
-                    ec2_launch_nodes
+                    log DSPLY "Deploying PPSS on nodes. See ppss-deploy.txt for details."
                     deploy_ppss
                     wait
                     cleanup
@@ -2847,8 +2818,7 @@ main () {
         status )
                     LOGFILE=/dev/null
                     display_header
-                    init_vars
-                    get_all_items
+                    test_server
                     show_status
                     exit 0
                     ;;
