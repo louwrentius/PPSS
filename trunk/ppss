@@ -1110,8 +1110,9 @@ upload_status () {
 set_status () {
 
     STATUS="$1"
-    NO_PROCESSED=$(wc -l "$PPSS_HOME_DIR/$LIST_OF_PROCESSED_ITEMS" | cut -d " " -f 1)
+    NO_PROCESSED=$(wc -l "$LIST_OF_PROCESSED_ITEMS" | awk '{ print $1 }' )
     NODE=`cat $PPSS_DIR/$NODE_ID`
+   
     echo "$NODE $HOSTNAME $STATUS $NO_PROCESSED" > "$NODE_STATUS_FILE"
     if [ ! -z "$SSH_SERVER" ]
     then
@@ -1259,9 +1260,12 @@ deploy () {
     ERROR=0
     set_error () {
 
-        if [ ! "$1" == "0" ]
-        then
+        if [ "$ERROR" == "1" ]
+        then 
             ERROR=1 
+        elif [ ! "$1" == "0" ]
+        then
+            ERROR=1
         fi
     }
 
@@ -1273,7 +1277,9 @@ deploy () {
     KEY=`echo $SSH_KEY | cut -d " " -f 2` 
 
     ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "cd ~ && mkdir -p $PPSS_HOME_DIR && mkdir -p $PPSS_HOME_DIR/$JOB_LOG_DIR && mkdir -p $PPSS_HOME_DIR/ITEM_LOCK_DIR >> /dev/null 2>&1" 
+    set_error $?
     ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "cd ~ && cd $PPSS_HOME_DIR && cd $PPSS_DIR && echo $NODE > $NODE_ID"
+    set_error $?
     scp -q $SSH_OPTS_NODE $SSH_KEY $0 $USER@$NODE:~/$PPSS_HOME_DIR
     set_error $?
     scp -q $SSH_OPTS_NODE $SSH_KEY $KEY $USER@$NODE:~/$PPSS_HOME_DIR
@@ -2663,20 +2669,41 @@ start_all_workers () {
 #}
 
 #get_node_status_from_server () {
-get_status_of_node () {
+get_status_of_nodes () {
 
-    RES=`ssh $SSH_OPTS $SSH_KEY $USER@$SERVER cat "$PPSS_HOME_DIR/$PPSS_NODE_STATUS/*" 2> /dev/null`
+    RESULT_FILE="$1"
+
+    ssh $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER cat "$PPSS_HOME_DIR/$PPSS_NODE_STATUS/*" > "$RESULT_FILE" 2>&1
+
     IFS=$'\n'
-    for x in $RES
+
+    for x in `cat $RESULT_FILE`
     do
-        log DSPLY "$x"
+        IP=`echo $x | awk '{ print $1 }'`
+        HOST=`echo $x | awk '{ print $2 }'`
+        STATUS=`echo $x | awk '{ print $3 }'`
+        RES=`echo $x | awk '{ print $4 }'`
+        if [ -z "$RES" ]
+        then
+            RES="0"
+        fi
+        PROCESSED=$((PROCESSED+RES))
+        LINE=`echo "$IP $HOST $RES $STATUS" | awk '{ printf ("%-16s %-18s % 10s %10s\n",$1,$2,$3,$4) }'`
+        log DSPLY "$LINE"
     done    
+
+    log DSPLY "---------------------------------------------------------"
+    LINE=`echo $PROCESSED | awk '{ printf ("Total processed: % 29s\n",$1) }'`
+    log DSPLY "$LINE"
+
+    rm "$RESULT_FILE"
 
 }
 
 show_status () {
 
-    source $CONFIG
+    . $CONFIG
+
     if [ ! -z "$SSH_KEY" ]
     then
         SSH_KEY="-i $SSH_KEY"
@@ -2708,29 +2735,9 @@ show_status () {
     log DSPLY "---------------------------------------------------------"
     PROCESSED=0
 
-    for x in `cat $NODES_FILE`
-    do
-        RES=0
-        NODE=`get_status_of_node "$x" | awk '{ print $1 }'`
-        if [ ! "$NODE" == "UNKNOWN" ]
-        then
-            STATUS=`get_status_of_node "$x" | awk '{ print $2 }'`
-            RES=`exec_cmd "grep -i $NODE ~/$PPSS_HOME_DIR/$JOB_LOG_DIR/* 2>/dev/null | wc -l " 1`
-            if [ ! "$?" ] || [ -z "$RES" ]
-            then
-                RES=0
-            fi
-        else
-            STATUS="UNKNOWN"
-            RES=0
-        fi
-        let PROCESSED="$PROCESSED+$RES"
-        LINE=`echo "$x $NODE $RES $STATUS" | awk '{ printf ("%-16s %-18s % 10s %10s\n",$1,$2,$3,$4) }'`
-        log DSPLY "$LINE"
-    done
-    log DSPLY "---------------------------------------------------------"
-    LINE=`echo $PROCESSED | awk '{ printf ("Total processed: % 29s\n",$1) }'`
-    log DSPLY "$LINE"
+    RESULT_FILE="$RADOM$RANDOM.deleteme"
+    get_status_of_nodes "$RESULT_FILE"
+
 }
 
 main () {
