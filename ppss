@@ -793,6 +793,21 @@ process_arguments () {
         echo "Source directory $SRC_DIR does not exist."
         exit 1
     fi
+    
+    if [ "$SRC_DIR" == "." ]
+    then
+        echo 
+        echo "PPSS is not designed to process items from within the directory"
+        echo "it is being run. PPSS will start to process its own files from"
+        echo "its working directory $PPSS_DIR which is probably not wat you"
+        echo "want. Are you sure you want to continue?"
+        echo 
+        read YN
+        if [ ! "$YN" == "y" ] || [ ! "$YN" == "Y" ]
+        then
+            exit 1
+        fi
+    fi
 
     if [ "$DAEMON" == "1" ] && [ -z "$SRC_DIR" ]
     then
@@ -1109,17 +1124,16 @@ upload_status () {
 
 set_status () {
 
-    STATUS="$1"
-    NO_PROCESSED=$(wc -l "$LIST_OF_PROCESSED_ITEMS" | awk '{ print $1 }' )
-    NODE=`cat $PPSS_DIR/$NODE_ID`
-   
-    echo "$NODE $HOSTNAME $STATUS $NO_PROCESSED" > "$NODE_STATUS_FILE"
     if [ ! -z "$SSH_SERVER" ]
     then
+        STATUS="$1"
+        NO_PROCESSED=$(wc -l "$LIST_OF_PROCESSED_ITEMS" | awk '{ print $1 }' )
+        NODE=`cat $PPSS_DIR/$NODE_ID`
+       
+        echo "$NODE $HOSTNAME $STATUS $NO_PROCESSED" > "$NODE_STATUS_FILE"
         upload_status
     fi
 }
-
 
 check_status () {
 
@@ -1238,7 +1252,8 @@ is_screen_installed () {
     ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "screen -m -D -S test ls" > /dev/null 2>&1 
     if [ ! "$?" == "0" ]
     then
-        log ERROR "The 'Screen' command is not installed on node $NODE."
+        log ERROR "The 'Screen' command may not be installed on node $NODE."
+        log ERROR "Or some other SSH related error occurred." 
         return 1
     else
         log DEBUG "'Screen' is installed on node $NODE."
@@ -2654,21 +2669,6 @@ start_all_workers () {
     done
 }
 
-#get_status_of_node () {
-#
-#    NODE="$1"
-#    NODE_HOSTNAME=`ssh $SSH_OPTS_NODE $SSH_KEY $USER@$NODE hostname`
-#    STATUS=`ssh $SSH_OPTS_NODE $SSH_KEY $USER@$NODE cat "$PPSS_HOME_DIR/$PPSS_NODE_STATUS/$NODE_HOSTNAME-status.txt" 2>/dev/null`
-#    echo "STATUS=ssh $SSH_OPTS_NODE $SSH_KEY $USER@$NODE cat $PPSS_HOME_DIR/$PPSS_DIR/$PPSS_NODE_STATUS/$NODE_HOSTNAME-status.txt 2>/dev/null" >> abc.txt
-#    ERROR="$?"
-#    if [ ! "$ERROR" == "0" ]
-#    then
-#        STATUS="UNKNOWN"
-#    fi
-#    echo "$STATUS"
-#}
-
-#get_node_status_from_server () {
 get_status_of_nodes () {
 
     RESULT_FILE="$1"
