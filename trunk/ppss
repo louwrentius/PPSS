@@ -567,7 +567,7 @@ process_arguments () {
                                     else
                                         echo "Aborting..."
                                         cleanup
-                                        exit
+                                        exit 1
                                     fi 
                                 fi
                             fi
@@ -592,7 +592,7 @@ process_arguments () {
                                     fi
                                 else
                                     echo "File $SSH_KNOWN_HOSTS does not exist."
-                                    exit
+                                    exit 1
                                 fi
                             fi
                             shift 2 ;;
@@ -1814,7 +1814,7 @@ get_all_items () {
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             else
                 log DEBUG "Recursion is disabled."
-                `exec_cmd "find $SRC_DIR/ -d 1 ! -type d" > "$LISTOFITEMS"`
+                `exec_cmd "find $SRC_DIR/ -depth 1 ! -type d" > "$LISTOFITEMS"`
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             fi
 
@@ -1828,7 +1828,7 @@ get_all_items () {
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 else
                     log DEBUG "Recursion is disabled."
-                    `find "$SRC_DIR"/ -d 1 ! -type d >> "$LISTOFITEMS"`
+                    `find "$SRC_DIR"/ -depth 1 ! -type d >> "$LISTOFITEMS"`
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 fi
                 if [ ! -e "$LISTOFITEMS" ]
@@ -2787,7 +2787,7 @@ main () {
                     log DSPLY "Stopping PPSS on all nodes."
                     exec_cmd "touch $STOP_SIGNAL"
                     cleanup
-                    exit
+                    exit 0
                     ;;
         pause )
                     LOGFILE=/dev/null
@@ -2795,7 +2795,7 @@ main () {
                     log DSPLY "Pausing PPSS on all nodes."
                     exec_cmd "touch $PAUSE_SIGNAL"
                     cleanup
-                    exit
+                    exit 0
                     ;;
         continue )
                     LOGFILE=/dev/null
