@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#set -x
 #
 # PPSS, the Parallel Processing Shell Script
 # 
@@ -428,7 +429,7 @@ check_for_interrupt () {
     does_file_exist "$STOP_SIGNAL"
     if [ "$?" = "0" ]
     then
-        set_status "STOPPED"
+        set_status "STOPPED" "$FAILED_ITEMS_COUNTER"
         log INFO "STOPPING job. Stop signal found."
         STOP="1"
         return 1
@@ -437,18 +438,18 @@ check_for_interrupt () {
     does_file_exist "$PAUSE_SIGNAL"
     if [ "$?" = "0" ]
     then
-        set_status "PAUSED"
+        set_status "PAUSED" "$FAILED_ITEMS_COUNTER"
         log INFO "PAUSE: sleeping for $PAUSE_DELAY SECONDS."
         sleep $PAUSE_DELAY
         check_for_interrupt
     else
-        set_status "RUNNING"
+        set_status "RUNNING" "$FAILED_ITEMS_COUNTER"
     fi
 }
 
 cleanup () {
-
-    log DEBUG "$FUNCNAME - Cleaning up all temp files and processes."
+    
+    log DEBUG "$FUNCNAME - Cleaning up all temp files and processes. $1"
     
     if [ -e "$FIFO" ]
     then 
@@ -459,7 +460,6 @@ cleanup () {
     then
         rm -rf "$SSH_SOCKET"
     fi
-
 }
 
 add_var_to_config () {
@@ -769,7 +769,7 @@ process_arguments () {
                             echo ""
                             echo "$SCRIPT_NAME version $SCRIPT_VERSION"
                             echo ""
-                            exit "$GLOBAL_ITEMS_COUNTER ;;
+                            exit 0 ;;
             * )
                             
                             showusage_short
@@ -925,7 +925,7 @@ set_stat () {
 }
 
 log () {
-    
+
     #
     # Type 'DSPLY ERROR and WARN' is logged to the screen
     # Any other log-type is only logged to the logfile.
@@ -1018,13 +1018,20 @@ init_vars () {
     fi
 
     FIFO="$PPSS_DIR"/ppss-fifo-$RANDOM-$RANDOM
+    FIFO_LISTENER="$PPSS_DIR"/ppss-fifo-listener-$RANDOM-$RANDOM
 
     if [ ! -e "$FIFO" ]
     then    
         mkfifo -m 600 $FIFO
     fi
 
+    if [ ! -e "$FIFO_LISTENER" ]
+    then    
+        mkfifo -m 600 $FIFO_LISTENER
+    fi
+
     exec 42<> $FIFO
+    exec 43<> $FIFO_LISTENER
 
     set_status "RUNNING" 
 
@@ -1132,8 +1139,9 @@ set_status () {
         STATUS="$1"
         NO_PROCESSED=$(wc -l "$LIST_OF_PROCESSED_ITEMS" | awk '{ print $1 }' )
         NODE=`cat $PPSS_DIR/$NODE_ID`
+        FAILED="$2"
        
-        echo "$NODE $HOSTNAME $STATUS $NO_PROCESSED" > "$NODE_STATUS_FILE"
+        echo "$NODE $HOSTNAME $STATUS $NO_PROCESSED" "$FAILED" > "$NODE_STATUS_FILE"
         upload_status
     fi
 }
@@ -1148,8 +1156,8 @@ check_status () {
     then
         log DSPLY "$FUNCTION - $MESSAGE"
         set_status ERROR 
-        cleanup
-        exit 1
+        cleanup 
+        exit "$ERROR"
     fi
 }
 
@@ -1345,8 +1353,8 @@ deploy_ppss () {
     if [ -z "$KEY" ] || [ ! -e "$KEY" ]
     then
         log ERROR "Private SSH key $KEY not found."
-        cleanup
         set_status "ERROR"
+        cleanup 
         exit 1
     fi
 
@@ -1838,7 +1846,7 @@ get_all_items () {
                 then
                     log ERROR "Local input file is not created, something is wrong. Bug?"
                     set_status "ERROR"
-                    cleanup 
+                    cleanup
                     exit 1
                 fi
                 
@@ -1855,7 +1863,7 @@ get_all_items () {
         then
             log ERROR "Input file $INPUT_FILE does not exist."
             set_status "ERROR"
-            cleanup 
+            cleanup
             exit 1
         fi
     
@@ -1875,9 +1883,8 @@ get_all_items () {
         then
             log ERROR "Input is empty."
             infanticide
-            terminate_listener
+            terminate_listener 
             cleanup
-            exit 1
         fi
     fi
 
@@ -1890,16 +1897,11 @@ get_all_items () {
 
     SIZE_OF_INPUT=$(wc -l "$LISTOFITEMS" | awk '{ print $1 }')
 
-    #if [ "$SIZE_OF_INPUT" -eq "1" ]
-    #then
-    #    MAX_NO_OF_RUNNING_JOBS=1
-    #fi
-
     if [ "$SIZE_OF_INPUT" -le "0" ] && [ "$DAEMON" = "0" ]
     then
         log ERROR "Source file/dir seems to be empty."
         set_status "STOPPED"
-        cleanup
+        cleanup 
         exit 1
     fi
 
@@ -1907,7 +1909,7 @@ get_all_items () {
 
 get_item () {
 
-    check_for_interrupt
+    check_for_interrupt 
 
     if [ "$STOP" == "1" ]
     then
@@ -2422,6 +2424,8 @@ display_progress () {
 
 terminate_listener () {
 
+    GLOBAL_FAILED_COUNTER="$1"
+
     log DEBUG "Running $FUNCNAME"
 
     if [ ! -z "$SSH_MASTER_PID" ]
@@ -2431,7 +2435,7 @@ terminate_listener () {
         log DEBUG "SSH master PID is empty."
     fi 
 
-    set_status "STOPPED"
+    set_status "STOPPED" "$GLOBAL_FAILED_COUNTER"
     log DEBUG "Listener stopped."
 
     if [ ! "$PERCENT" == "100" ]
@@ -2440,7 +2444,6 @@ terminate_listener () {
 	    stop-ppss
         log DSPLY "$FAILED_ITEMS_COUNTER failed items."
         log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
-        #log DSPLY "Press ENTER to continue."
     else
         echo
 	    stop-ppss
@@ -2460,7 +2463,9 @@ terminate_listener () {
         fi
     fi
 
-    cleanup
+    cleanup 
+
+    echo "$GLOBAL_FAILED_COUNTER" >> "$FIFO_LISTENER"
 }
 
 inotify_listener () {
@@ -2652,9 +2657,11 @@ listen_for_job () {
 
         display_progress 
 
+        set_status "RUNNING" "$FAILED_ITEMS_COUNTER"
+
     done
 
-    terminate_listener
+    terminate_listener "$FAILED_ITEMS_COUNTER"
 }
 
 start_all_workers () {
@@ -2702,17 +2709,18 @@ get_status_of_nodes () {
         HOST=`echo $x | awk '{ print $2 }'`
         STATUS=`echo $x | awk '{ print $3 }'`
         RES=`echo $x | awk '{ print $4 }'`
+        FAIL=`echo $x | awk '{ print $5 }'`
         if [ -z "$RES" ]
         then
             RES="0"
         fi
         PROCESSED=$((PROCESSED+RES))
-        LINE=`echo "$IP $HOST $RES $STATUS" | awk '{ printf ("%-16s %-18s % 10s %10s\n",$1,$2,$3,$4) }'`
+        LINE=`echo "$IP $HOST $RES $FAIL $STATUS" | awk '{ printf ("%-16s %-16s % 8s %6s %7s\n",$1,$2,$3,$4,$5) }'`
         log DSPLY "$LINE"
     done    
 
     log DSPLY "---------------------------------------------------------"
-    LINE=`echo $PROCESSED | awk '{ printf ("Total processed: % 29s\n",$1) }'`
+    LINE=`echo $PROCESSED $FAIL | awk '{ printf ("Total processed/failed: %18s %6s \n",$1,$2) }'`
     log DSPLY "$LINE"
 
     rm "$RESULT_FILE"
@@ -2749,7 +2757,7 @@ show_status () {
     log DSPLY "Items:\t\t$ITEMS"
 
     log DSPLY "---------------------------------------------------------"
-    HEADER=`echo IP-address Hostname Processed Status | awk '{ printf ("%-16s %-18s % 10s %10s\n",$1,$2,$3,$4) }'`  
+    HEADER=`echo IP-address Hostname Processed Failed Status | awk '{ printf ("%-16s %-15s % 2s %2s %2s\n",$1,$2,$3,$4,$5) }'`  
     log DSPLY "$HEADER"
     log DSPLY "---------------------------------------------------------"
     PROCESSED=0
@@ -2788,7 +2796,6 @@ main () {
                         done
                     fi
                     cleanup
-                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         config )
                     LOGFILE=/dev/null
@@ -2797,7 +2804,6 @@ main () {
                     add_var_to_config PPSS_LOCAL_TMPDIR "$PPSS_LOCAL_TMPDIR"
                     add_var_to_config PPSS_LOCAL_OUTPUT "$PPSS_LOCAL_OUTPUT"
                     cleanup
-                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
 
         stop )
@@ -2806,7 +2812,6 @@ main () {
                     log DSPLY "Stopping PPSS on all nodes."
                     exec_cmd "touch $STOP_SIGNAL"
                     cleanup
-                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         pause )
                     LOGFILE=/dev/null
@@ -2814,7 +2819,6 @@ main () {
                     log DSPLY "Pausing PPSS on all nodes."
                     exec_cmd "touch $PAUSE_SIGNAL"
                     cleanup
-                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         continue )
                     LOGFILE=/dev/null
@@ -2830,7 +2834,6 @@ main () {
                         exec_cmd "rm -f $PAUSE_SIGNAL"
                     fi
                     cleanup
-                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         deploy )
                     LOGFILE=ppss-deploy.txt
@@ -2839,14 +2842,12 @@ main () {
                     deploy_ppss
                     wait
                     cleanup
-                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         status )
                     LOGFILE=/dev/null
                     display_header
                     test_server
                     show_status
-                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         erase )
                     LOGFILE=/dev/null
@@ -2854,7 +2855,6 @@ main () {
                     log DSPLY "Erasing PPSS from all nodes."
                     erase_ppss
                     cleanup
-                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         kill )
                     LOGFILE=/dev/null
@@ -2863,7 +2863,6 @@ main () {
                          kill "$x"
                     done
                     cleanup
-                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
 
         * )
@@ -2897,6 +2896,13 @@ then
     #
     # Exit after all processes have finished.
     #
-    wait 
+    #wait 
+    if [ -e "$FIFO_LISTENER" ]
+    then
+        while read event <& 43
+        do
+            rm "$FIFO_LISTENER"
+            exit "$event"
+        done
+    fi
 fi
-
