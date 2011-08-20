@@ -769,7 +769,7 @@ process_arguments () {
                             echo ""
                             echo "$SCRIPT_NAME version $SCRIPT_VERSION"
                             echo ""
-                            exit 0 ;;
+                            exit "$GLOBAL_ITEMS_COUNTER ;;
             * )
                             
                             showusage_short
@@ -2788,7 +2788,7 @@ main () {
                         done
                     fi
                     cleanup
-                    exit 0
+                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         config )
                     LOGFILE=/dev/null
@@ -2797,7 +2797,7 @@ main () {
                     add_var_to_config PPSS_LOCAL_TMPDIR "$PPSS_LOCAL_TMPDIR"
                     add_var_to_config PPSS_LOCAL_OUTPUT "$PPSS_LOCAL_OUTPUT"
                     cleanup
-                    exit 0
+                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
 
         stop )
@@ -2806,7 +2806,7 @@ main () {
                     log DSPLY "Stopping PPSS on all nodes."
                     exec_cmd "touch $STOP_SIGNAL"
                     cleanup
-                    exit 0
+                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         pause )
                     LOGFILE=/dev/null
@@ -2814,7 +2814,7 @@ main () {
                     log DSPLY "Pausing PPSS on all nodes."
                     exec_cmd "touch $PAUSE_SIGNAL"
                     cleanup
-                    exit 0
+                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         continue )
                     LOGFILE=/dev/null
@@ -2830,7 +2830,7 @@ main () {
                         exec_cmd "rm -f $PAUSE_SIGNAL"
                     fi
                     cleanup
-                    exit 0
+                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         deploy )
                     LOGFILE=ppss-deploy.txt
@@ -2839,14 +2839,14 @@ main () {
                     deploy_ppss
                     wait
                     cleanup
-                    exit 0
+                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         status )
                     LOGFILE=/dev/null
                     display_header
                     test_server
                     show_status
-                    exit 0
+                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         erase )
                     LOGFILE=/dev/null
@@ -2854,7 +2854,7 @@ main () {
                     log DSPLY "Erasing PPSS from all nodes."
                     erase_ppss
                     cleanup
-                    exit 0
+                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
         kill )
                     LOGFILE=/dev/null
@@ -2863,7 +2863,7 @@ main () {
                          kill "$x"
                     done
                     cleanup
-                    exit 0
+                    exit "$GLOBAL_ITEMS_COUNTER
                     ;;
 
         * )
