@@ -58,13 +58,14 @@ PPSS_HOME_DIR="ppss-home"
 SOURCED="$0"
 
 PID="$$"
-PAUSE_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/pause_signal"                   # Pause processing if this file is present.
+PAUSE_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/pause_signal"      # Pause processing if this file is present.
 PAUSE_DELAY="60"                                          # Polling every 1 minutes by default.
-STOP_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/stop_signal"                     # Stop processing if this file is present.
+STOP_SIGNAL="$PPSS_HOME_DIR/$PPSS_DIR/stop_signal"        # Stop processing if this file is present.
 GLOBAL_COUNTER=1
 LISTOFITEMS="$PPSS_DIR/INPUT_FILE-$PID"
-JOB_LOG_DIR="$PPSS_DIR/job_log"                         # Directory containing log files of processed items.
+JOB_LOG_DIR="$PPSS_DIR/job_log"                           # Directory containing log files of processed items.
 LOGFILE="$PPSS_DIR/ppss-log-$PID.txt"                     # General PPSS log file. Contains lots of info.
+FAILED_ITEMS_COUNTER=0
 QUIET="0"
 STOP="0"                                                  # STOP job.
 MAX_DELAY="0"                                             # MAX DELAY between jobs.
@@ -74,8 +75,9 @@ LISTENER_PID=""
 IFS_BACKUP="$IFS"
 CPUINFO="/proc/cpuinfo"
 PROCESSORS=""
-START_KEY="$RANDOM$RANDOM$RANDOM"
-KILL_KEY="$RANDOM$RANDOM$RANDOM"                        # This is a signal to stop immediately and kill
+START_KEY="$RANDOM$RANDOM$RANDOM$RANDOM"           # If this key is received by listener, start a new process
+FAIL_KEY="$RANDOM$RANDOM$RANDOM$RANDOM"            # if this key is received by listener, increase error count              
+KILL_KEY="$RANDOM$RANDOM$RANDOM$RANDOM"            # This is a signal to stop immediately and kill PPSS
 QUEUE=""
 INOTIFY=""
 RECURSION="1"                                           # all running processes.
@@ -974,7 +976,8 @@ log () {
     fi
     if [ "$TYPE" == "PRCNT" ]
     then
-        echo -en "\r$ECHO_MSG"
+       echo -en "\r$ECHO_MSG"
+       #echo "$ECHO_MSG" # for debugging.
     fi
 }
 
@@ -2165,10 +2168,10 @@ commando () {
     echo -e "Start date:\t$DATE" >> "$ITEM_LOG_FILE"
     echo -e "" >> "$ITEM_LOG_FILE"
     
-    #
-    # The actual execution of the command as specified by
-    # the -c option.
-    #
+#-->#
+#--># The actual execution of the command as specified by
+#--># the -c option.
+#-->#
     BEFORE=`get_time_in_seconds`
     `echo $COMMAND | grep -i '$ITEM' >> /dev/null 2>&1`
     RETVAL="$?"
@@ -2190,6 +2193,8 @@ commando () {
     if [ ! "$ERROR" == "0" ] 
     then
        mail_on_error "$ITEM" "$ITEM_LOG_FILE"
+       log DEBUG "Processing Item $ITEM failed."
+       echo "$FAIL_KEY" >> "$FIFO" 
        echo -e "Status:\t\tFAILURE" >> "$ITEM_LOG_FILE"
     else
        echo -e "Status:\t\tSUCCESS" >> "$ITEM_LOG_FILE"
@@ -2384,12 +2389,19 @@ display_progress () {
     if [ "$DAEMON" = "0" ]
     then
         SIZE_OF_INPUT=$(wc -l "$LISTOFITEMS" | awk '{ print $1 }')
-        PERCENT=$((100 * $GLOBAL_COUNTER / $SIZE_OF_INPUT ))
-        if [ ! "$ACTIVE_WORKERS" == "0" ] && [ "$FINISHED" == "0" ] 
+        GC=0
+        if [ ! "$GLOBAL_COUNTER" -gt "$SIZE_OF_INPUT" ]
+        then
+            GC="$GLOBAL_COUNTER"
+        else
+            GC="$SIZE_OF_INPUT"
+        fi
+        PERCENT=$((100 * $GC / $SIZE_OF_INPUT ))
+        if [ ! "$ACTIVE_WORKERS" == "0" ] # && [ "$FINISHED" == "0" ] 
         then
             if [ "$QUIET" == "0" ]
             then
-                log PRCNT "Currently $PERCENT percent complete. Processed $GLOBAL_COUNTER of $SIZE_OF_INPUT." 
+                log PRCNT "$PERCENT% complete. Processed $GC of $SIZE_OF_INPUT. Failed $FAILED_ITEMS_COUNTER/$SIZE_OF_INPUT." 
                 show_eta
             elif [ "$DAEMON" == "0" ]
             then
@@ -2426,6 +2438,7 @@ terminate_listener () {
     then
         echo
 	    stop-ppss
+        log DSPLY "$FAILED_ITEMS_COUNTER failed items."
         log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
         #log DSPLY "Press ENTER to continue."
     else
@@ -2595,16 +2608,15 @@ listen_for_job () {
 
     while read event <& 42
     do
-        display_progress
         log INFO "Current active workers is $ACTIVE_WORKERS"
 
-        if [ "$event" = "$START_KEY" ]
+        if [ "$event" == "$START_KEY" ]
         then
             decrease_active_workers
 
             log DEBUG "Got a 'start-key' event"
 
-            if [ "$DAEMON" = "0" ]
+            if [ "$DAEMON" == "0" ]
             then
                 if get_item
                 then
@@ -2614,6 +2626,7 @@ listen_for_job () {
                     log DEBUG "No more new items..."
                     if [ "$ACTIVE_WORKERS" = "0" ]
                     then
+                        display_progress 
                         break
                     else
                         display_jobs_remaining
@@ -2623,7 +2636,10 @@ listen_for_job () {
                 log DEBUG "Daemon mode: a worker finished..."
                 run_command 
             fi
-
+        elif [ "$event" == "$FAIL_KEY" ]
+        then
+            ((FAILED_ITEMS_COUNTER++))
+            log DEBUG "An item failed to process. $FAILED_ITEMS_COUNTER"
         elif [ "$event" == "$KILL_KEY" ]
         then
             infanticide
@@ -2633,6 +2649,9 @@ listen_for_job () {
             stack_push "$event"
             run_command
         fi
+
+        display_progress 
+
     done
 
     terminate_listener
