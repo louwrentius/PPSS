@@ -1402,6 +1402,12 @@ test_server () {
     # Testing if the remote server works as expected.
     if [ ! -z "$SSH_SERVER" ] 
     then 
+        if [ ! -e "$SSH_SOCKET" ]
+        then
+            DIR=`dirname $SSH_SOCKET`
+            mkdir -p "$DIR"
+        fi
+        
         exec_cmd "date >> /dev/null"
         check_status "$?" "$FUNCNAME" "Server $SSH_SERVER could not be reached"
         
