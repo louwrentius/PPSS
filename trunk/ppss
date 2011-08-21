@@ -2698,6 +2698,7 @@ start_all_workers () {
 get_status_of_nodes () {
 
     RESULT_FILE="$1"
+    FAILED=0
 
     ssh $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER cat "$PPSS_HOME_DIR/$PPSS_NODE_STATUS/*" > "$RESULT_FILE" 2>&1
 
@@ -2715,12 +2716,13 @@ get_status_of_nodes () {
             RES="0"
         fi
         PROCESSED=$((PROCESSED+RES))
+        FAILED=$((FAILED+FAIL))
         LINE=`echo "$IP $HOST $RES $FAIL $STATUS" | awk '{ printf ("%-16s %-16s % 8s %6s %7s\n",$1,$2,$3,$4,$5) }'`
         log DSPLY "$LINE"
     done    
 
     log DSPLY "---------------------------------------------------------"
-    LINE=`echo $PROCESSED $FAIL | awk '{ printf ("Total processed/failed: %18s %6s \n",$1,$2) }'`
+    LINE=`echo $PROCESSED $FAILED | awk '{ printf ("Total processed/failed: %18s %6s \n",$1,$2) }'`
     log DSPLY "$LINE"
 
     rm "$RESULT_FILE"
