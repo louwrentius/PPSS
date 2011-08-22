@@ -450,10 +450,23 @@ check_for_interrupt () {
 cleanup () {
     
     log DEBUG "$FUNCNAME - Cleaning up all temp files and processes. $1"
+
+    for x in $MODES
+    do
+        if [ "$x" == "$MODE" ]
+        then
+            rm -rf "$PPSS_DIR"
+        fi
+    done
     
     if [ -e "$FIFO" ]
     then 
         rm "$FIFO"
+    fi
+
+    if [ -e "$FIFO_LISTENER" ]
+    then 
+        rm "$FIFO_LISTENER"
     fi
 
     if [ -e "$SSH_SOCKET" ]
@@ -2856,6 +2869,7 @@ main () {
                     display_header
                     test_server
                     show_status
+                    cleanup
                     ;;
         erase )
                     LOGFILE=/dev/null
