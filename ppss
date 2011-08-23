@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 #set -x
 #
 # PPSS, the Parallel Processing Shell Script
@@ -96,6 +95,7 @@ DAEMON_FILE_AGE="4"
 ENABLE_INPUT_LOCK="0"
 PROCESSING_TIME=""
 NODE_ID="NODE_ID"
+USE_MD5="0"
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -201,7 +201,7 @@ showusage_normal () {
     echo -e "--email | -e       PPSS sends an e-mail if PPSS has finished. It is also used if processing"
     echo -e "                   of an item has failed (configurable, see -h). "
     echo 
-    echo -e "--help             Extended help, including options for distributed mode and Amazon EC2."
+    echo -e "--help             Extended help, including options for distributed mode."
     echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
@@ -288,6 +288,10 @@ showusage_long () {
     echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
     echo -e "                   used. If this is not prefered, this can be disabled with this option."
     echo -e "                   Only files within the specified directory will be processed."
+    echo
+    echo -e "--md5|-M           Use MD5 to create unique file names for locking and log file names."
+    echo -e "                   PPSS strips al non [:alnum:] characters of an item string and this may"
+    echo -e "                   cause collisions. String ABC!@# and ABC^&* will become both ABC___"
     echo 
     echo -e "The following options are used for distributed execution of PPSS."
     echo 
@@ -331,21 +335,6 @@ showusage_long () {
     echo
     echo -e "--script | -S      Script to run on the node. PPSS must copy this script to the node."
     echo
-    echo -e "Amazon EC2 platform specific options:"
-    echo 
-    echo -e "--awskeypair | -P  The Amazon EC2 SSH keypair that new instances should use."
-    echo 
-    echo -e "--AMI    | -A      The Amazon Machine Image that should be used to create new"
-    echo -e "                   running instances."
-    echo 
-    echo -e "--type   | -T      The type of EC2 instance that should be created."
-    echo -e "                   Example: c1.xlarge or m1.medium"
-    echo 
-    echo -e "--security   | -G  The security group that should be used for networking access."
-    echo 
-    echo -e "--instances  | -I  The number of instances that should be started."
-    echo 
-    echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
     echo -e "$0 -c 'lame ' -d /path/to/wavfiles -j " 
@@ -664,26 +653,6 @@ process_arguments () {
                             EMAIL="$2"
                             add_var_to_config EMAIL "$EMAIL"
                             shift 2 ;;
-          --awskeypair|-P)
-                AWS_KEYPAIR="$2"
-                add_var_to_config AWS_KEYPAIR "$AWS_KEYPAIR"
-                shift 2 ;;
-          --AMI|-A)
-                AMI_ID="$2"
-                add_var_to_config AMI_ID "$AMI_ID"
-                shift 2 ;;
-          --type|-T)
-                INSTANCE_TYPE="$2"
-                add_var_to_config INSTANCE_TYPE "$INSTANCE_TYPE"
-                shift 2 ;; 
-          --security|-G)
-                SECURITY_GROUP="$2"
-                add_var_to_config SECURITY_GROUP "$SECURITY_GROUP"
-                shift 2 ;;
-          --instances|-I)
-                NUM_NODES="$2"
-                add_var_to_config NUM_NODES "$NUM_NODES"
-                shift 2 ;;
               --command|-c ) 
                             COMMAND="$2"
                             is_var_empty "$COMMAND"
@@ -721,6 +690,10 @@ process_arguments () {
                             WORKINGDIR="$2"
                             add_var_to_config WORKINGDIR "$WORKINGDIR"
                             shift 2 ;;
+           --md5|-M ) 
+                            USE_MD5="1"
+                            add_var_to_config USE_MD5 "$USE_MD5"
+                            shift 1 ;;
                   --key|-k )
                             SSH_KEY="$2"
                             is_var_empty "$SSH_KEY"
@@ -896,20 +869,28 @@ get_time_in_seconds () {
 
 set_md5 () {
 
-    case $ARCH in
-        "Darwin")  MD5=md5 ;;
-        "FreeBSD") MD5=md5 ;;
-        "SunOS")   MD5="digest -a md5" ;; 
-        "Linux")   MD5=md5sum ;;
-    esac
-
-    echo "test" | $MD5 > /dev/null 2>&1
-    if [ ! "$?" ]
+    if [ "$USE_MD5" == "1" ]
     then
-        LOG ERROR "ERROR - PPSS requires $MD5. It may not be within the path or installed."
-        return 1
+
+        log DEBUG "MD5 is used."
+
+        case $ARCH in
+            "Darwin")  MD5=md5 ;;
+            "FreeBSD") MD5=md5 ;;
+            "SunOS")   MD5="digest -a md5" ;; 
+            "Linux")   MD5=md5sum ;;
+        esac
+
+        echo "test" | $MD5 > /dev/null 2>&1
+        if [ ! "$?" ]
+        then
+            LOG ERROR "ERROR - PPSS requires $MD5. It may not be within the path or installed."
+            return 1
+        else
+            return 0 
+        fi
     else
-        return 0 
+        log DEBUG "MD5 is not used."
     fi
 }
 
@@ -1697,8 +1678,14 @@ lock_item () {
         return 0
     else
         ITEM="$1"
-        LOCK_FILE_NAME_MD5=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
-        ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME_MD5"
+
+        if [ "$USE_MD5" == "1" ]
+        then
+            LOCK_FILE_NAME=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
+        else
+            LOCK_FILE_NAME=`echo "$ITEM" | sed s/[^[:alnum:]]/_/g`
+        fi
+        ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME"
         log DEBUG "Locking item $ITEM_LOCK_FILE"
         exec_cmd "mkdir $ITEM_LOCK_FILE >> /dev/null 2>&1"
         ERROR="$?"
@@ -2138,7 +2125,12 @@ commando () {
     #
     # Create the log file containing the output of the command.
     #
-    LOG_FILE_NAME=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
+    if [ "$USE_MD5" == "1" ]
+    then
+        LOG_FILE_NAME=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
+    else
+        LOG_FILE_NAME=`echo "$ITEM" | sed s/[^[:alnum:]]/_/g`
+    fi
     ITEM_LOG_FILE="$JOB_LOG_DIR/$LOG_FILE_NAME"
 
     if [ -e "$ITEM_LOG_FILE" ] && [ "$DISABLE_SKIPPING" = "0" ]
@@ -2482,9 +2474,8 @@ terminate_listener () {
         fi
     fi
 
-    cleanup 
-
     echo "$GLOBAL_FAILED_COUNTER" >> "$FIFO_LISTENER"
+
 }
 
 inotify_listener () {
@@ -2923,7 +2914,10 @@ then
     then
         while read event <& 43
         do
-            rm "$FIFO_LISTENER"
+            log DEBUG "Killing the listener!"
+
+            cleanup
+                        
             exit "$event"
         done
     fi
