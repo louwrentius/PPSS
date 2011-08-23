@@ -1,4 +1,4 @@
-#set -x
+#!/usr/bin/env bash
 #
 # PPSS, the Parallel Processing Shell Script
 # 
@@ -2914,10 +2914,7 @@ then
     then
         while read event <& 43
         do
-            log DEBUG "Killing the listener!"
-
             cleanup
-                        
             exit "$event"
         done
     fi

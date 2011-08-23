@@ -129,6 +129,8 @@ createSpecialFilenames () {
 
 testMD5 () {
 
+    export USE_MD5=1
+    init_vars > /dev/null 2>&1
     ARCH=Darwin
     set_md5
     assertEquals "MD5 executable not set properly - $MD5" "$MD5" "md5" 
