@@ -75,9 +75,9 @@ LISTENER_PID=""
 IFS_BACKUP="$IFS"
 CPUINFO="/proc/cpuinfo"
 PROCESSORS=""
-START_KEY="$RANDOM$RANDOM$RANDOM$RANDOM"           # If this key is received by listener, start a new process
-FAIL_KEY="$RANDOM$RANDOM$RANDOM$RANDOM"            # if this key is received by listener, increase error count              
-KILL_KEY="$RANDOM$RANDOM$RANDOM$RANDOM"            # This is a signal to stop immediately and kill PPSS
+START_KEY="start-$RANDOM$RANDOM$RANDOM$RANDOM"           # If this key is received by listener, start a new process
+FAIL_KEY="fail-$RANDOM$RANDOM$RANDOM$RANDOM"            # if this key is received by listener, increase error count              
+KILL_KEY="kill-$RANDOM$RANDOM$RANDOM$RANDOM"            # This is a signal to stop immediately and kill PPSS
 QUEUE=""
 INOTIFY=""
 RECURSION="1"                                           # all running processes.
@@ -96,6 +96,7 @@ ENABLE_INPUT_LOCK="0"
 PROCESSING_TIME=""
 NODE_ID="NODE_ID"
 USE_MD5="0"
+RANDOMIZE="0"
 
 SSH_SERVER=""                           # Remote server or 'master'.
 SSH_KEY=""                              # SSH key for ssh account.
@@ -285,10 +286,6 @@ showusage_long () {
     echo -e "                   used. If this is not prefered, this can be disabled with this option "
     echo -e "                   Only files within the specified directory will be processed."
     echo
-    echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
-    echo -e "                   used. If this is not prefered, this can be disabled with this option."
-    echo -e "                   Only files within the specified directory will be processed."
-    echo
     echo -e "--md5|-M           Use MD5 to create unique file names for locking and log file names."
     echo -e "                   PPSS strips al non [:alnum:] characters of an item string and this may"
     echo -e "                   cause collisions. String ABC!@# and ABC^&* will become both ABC___"
@@ -335,6 +332,10 @@ showusage_long () {
     echo
     echo -e "--script | -S      Script to run on the node. PPSS must copy this script to the node."
     echo
+    echo -e "--randomize | -R   Randomise which items to process by the client in distributed mode."
+    echo -e "                   This makes sure that with many nodes, some clients spend their time"
+    echo -e "                   trying to get a lock on an item."
+    echo
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
     echo -e "$0 -c 'lame ' -d /path/to/wavfiles -j " 
@@ -375,20 +376,19 @@ exec_cmd () {
     then
         if [ -z "$NOMP" ]
         then
-#            log DEBUG "REMOTE EXEC"
-#            log DEBUG "$USER@$SSH_SERVER $CMD"
+            #log DEBUG "REMOTE EXEC"
             ssh $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER $CMD
             STATUS=$?
         elif [ "$NOMP" == "1" ]
         then
-#            log DEBUG "REMOTE EXEC NO MP"
+            #log DEBUG "REMOTE EXEC NO MP"
             ssh $SSH_OPTS_NOMP $SSH_KEY $USER@$SSH_SERVER $CMD
             STATUS=$?
         fi
     else
         eval "$CMD"
         STATUS=$?
-#        log DEBUG "LOCAL EXEC - status is $STATUS"
+        log DEBUG "LOCAL EXEC - status is $STATUS"
     fi
     return $STATUS
 }
@@ -444,7 +444,10 @@ cleanup () {
     do
         if [ "$x" == "$MODE" ]
         then
-            rm -rf "$PPSS_DIR"
+            if [ "$x" != "node" ]
+            then
+                rm -rf "$PPSS_DIR"
+            fi
         fi
     done
     
@@ -461,6 +464,11 @@ cleanup () {
     if [ -e "$SSH_SOCKET" ]
     then
         rm -rf "$SSH_SOCKET"
+    fi
+    
+    if [ ! -z "$SSH_MASTER_PID" ]
+    then
+        kill "$SSH_MASTER_PID"
     fi
 }
 
@@ -712,6 +720,10 @@ process_arguments () {
                             SECURE_COPY=0
                             add_var_to_config SECURE_COPY "$SECURE_COPY"
                             shift 1 ;;
+           --randomize |-R )
+                            RANDOMIZE=1
+                            add_var_to_config RANDOMIZE "$RANDOMIZE"
+                            shift 1 ;;
             --outputdir|-o )
                             REMOTE_OUTPUT_DIR="$2"
                             add_var_to_config REMOTE_OUTPUT_DIR "$REMOTE_OUTPUT_DIR"
@@ -750,7 +762,6 @@ process_arguments () {
                             USER="$2"
                             add_var_to_config USER "$USER"
                             shift 2 ;;
-
             --version|-v )
                             echo ""
                             echo "$SCRIPT_NAME version $SCRIPT_VERSION"
@@ -1117,12 +1128,19 @@ init_vars () {
 
 upload_status () {
 
-    scp -q $SSH_OPTS $SSH_KEY $NODE_STATUS_FILE $USER@$SSH_SERVER:$PPSS_HOME_DIR/$PPSS_NODE_STATUS/
-    if [ "$?" == "0" ]
+    #log DEBUG "scp $SSH_OPTS $SSH_KEY $NODE_STATUS_FILE $USER@$SSH_SERVER:$PPSS_HOME_DIR/$PPSS_NODE_STATUS/"
+   # scp -v $SSH_OPTS $SSH_KEY $NODE_STATUS_FILE $USER@$SSH_SERVER:$PPSS_HOME_DIR/$PPSS_NODE_STATUS/ >> scp.tmp 2>&1
+    if [ -e "$NODE_STATUS_FILE" ] 
     then
-        log DEBUG "Uploaded status to server ok."
+        scp -vv -o GlobalKnownHostsFile=./known_hosts -i ppss-key.dsa $NODE_STATUS_FILE $USER@$SSH_SERVER:$PPSS_HOME_DIR/$PPSS_NODE_STATUS/ >> scp.tmp 2>&1
+        if [ "$?" == "0" ]
+        then
+            log DEBUG "Uploaded status to server ok."
+        else
+            log DEBUG "Uploaded status to server failed."
+        fi
     else
-        log DEBUG "Uploaded status to server failed."
+        log DEBUG "Status file not found thus not uploaded."
     fi
 }
 
@@ -1131,9 +1149,19 @@ set_status () {
     if [ ! -z "$SSH_SERVER" ]
     then
         STATUS="$1"
-        NO_PROCESSED=$(wc -l "$LIST_OF_PROCESSED_ITEMS" | awk '{ print $1 }' )
+        if [ -e "$LIST_OF_PROCESSED_ITEMS" ]
+        then
+            NO_PROCESSED=$(wc -l "$LIST_OF_PROCESSED_ITEMS" | awk '{ print $1 }' )
+        else
+            NO_PROCESSED="0"
+        fi
         NODE=`cat $PPSS_DIR/$NODE_ID`
         FAILED="$2"
+
+        if [ -z "$FAILED" ]
+        then
+            FAILED=0
+        fi
        
         echo "$NODE $HOSTNAME $STATUS $NO_PROCESSED" "$FAILED" > "$NODE_STATUS_FILE"
         upload_status
@@ -1157,6 +1185,13 @@ check_status () {
 
 erase_ppss () {
 
+    SSH_SOCKET="ppss_ssh_socket-$NODE"
+
+    SSH_OPTS_NODE="-o BatchMode=yes -o ControlPath=$SSH_SOCKET \
+                           -o GlobalKnownHostsFile=./known_hosts \
+                           -o ControlMaster=auto \
+                           -o Cipher=blowfish \
+                           -o ConnectTimeout=5 "
     
     echo "Are you realy sure you want to erase PPSS from all nodes!? (YES/NO)"
     read YN
@@ -1166,7 +1201,7 @@ erase_ppss () {
         for NODE in `cat $NODES_FILE`
         do
             log DSPLY "Erasing PPSS homedir $PPSS_HOME_DIR from node $NODE."
-            ssh -q $SSH_KEY $SSH_OPTS $USER@$NODE "rm -rf $PPSS_HOME_DIR"
+            ssh -q $SSH_KEY $SSH_OPTS_NODE $USER@$NODE "rm -rf $PPSS_HOME_DIR"
         done
     else
         log DSPLY "Aborting.."
@@ -1277,6 +1312,12 @@ deploy () {
                            -o Cipher=blowfish \
                            -o ConnectTimeout=5 "
 
+    SSH_OPTS_SLAVE="-o BatchMode=yes -o ControlPath=$SSH_SOCKET \
+                           -o GlobalKnownHostsFile=./known_hosts \
+                           -o ControlMaster=no \
+                           -o Cipher=blowfish \
+                           -o ConnectTimeout=5 "
+
     ERROR=0
     set_error () {
 
@@ -1288,36 +1329,38 @@ deploy () {
             ERROR=1
         fi
     }
-
-    ssh -N -M $SSH_OPTS_NODE $SSH_KEY $USER@$NODE &
-    SSH_PID=$!
+    if [ ! -e "$SSH_SOCKET" ]
+    then
+        ssh -q -N $SSH_OPTS_NODE $SSH_KEY $USER@$NODE &
+        SSH_PID=$!
+    fi
 
     is_screen_installed "$NODE"
 
     KEY=`echo $SSH_KEY | cut -d " " -f 2` 
 
-    ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "cd ~ && mkdir -p $PPSS_HOME_DIR && mkdir -p $PPSS_HOME_DIR/$JOB_LOG_DIR && mkdir -p $PPSS_HOME_DIR/ITEM_LOCK_DIR >> /dev/null 2>&1" 
+    ssh -q  $SSH_OPTS_SLAVE $SSH_KEY $USER@$NODE "cd ~ && mkdir -p $PPSS_HOME_DIR && mkdir -p $PPSS_HOME_DIR/$JOB_LOG_DIR && mkdir -p $PPSS_HOME_DIR/ITEM_LOCK_DIR >> /dev/null 2>&1" 
     set_error $?
-    ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "cd ~ && cd $PPSS_HOME_DIR && cd $PPSS_DIR && echo $NODE > $NODE_ID"
+    ssh -q $SSH_OPTS_SLAVE $SSH_KEY $USER@$NODE "cd ~ && cd $PPSS_HOME_DIR && cd $PPSS_DIR && echo $NODE > $NODE_ID"
     set_error $?
-    scp -q $SSH_OPTS_NODE $SSH_KEY $0 $USER@$NODE:~/$PPSS_HOME_DIR
+    scp -q $SSH_OPTS_SLAVE $SSH_KEY $0 $USER@$NODE:~/$PPSS_HOME_DIR
     set_error $?
-    scp -q $SSH_OPTS_NODE $SSH_KEY $KEY $USER@$NODE:~/$PPSS_HOME_DIR
+    scp -q $SSH_OPTS_SLAVE $SSH_KEY $KEY $USER@$NODE:~/$PPSS_HOME_DIR
     set_error $?
-    scp -q $SSH_OPTS_NODE $SSH_KEY $CONFIG $USER@$NODE:~/$PPSS_HOME_DIR
+    scp -q $SSH_OPTS_SLAVE $SSH_KEY $CONFIG $USER@$NODE:~/$PPSS_HOME_DIR
     set_error $?
-    scp -q $SSH_OPTS_NODE $SSH_KEY known_hosts $USER@$NODE:~/$PPSS_HOME_DIR
+    scp -q $SSH_OPTS_SLAVE $SSH_KEY known_hosts $USER@$NODE:~/$PPSS_HOME_DIR
     set_error $?
 
     if [ ! -z "$SCRIPT" ]
     then
-        scp -q $SSH_OPTS_NODE $SSH_KEY $SCRIPT $USER@$NODE:~/$PPSS_HOME_DIR
+        scp -q $SSH_OPTS_SLAVE $SSH_KEY $SCRIPT $USER@$NODE:~/$PPSS_HOME_DIR
         set_error $?
     fi
 
     if [ ! -z "$INPUT_FILE" ]
     then
-        scp -q $SSH_OPTS_NODE $SSH_KEY $INPUT_FILE $USER@$NODE:~/$PPSS_HOME_DIR
+        scp -q $SSH_OPTS_SLAVE $SSH_KEY $INPUT_FILE $USER@$NODE:~/$PPSS_HOME_DIR
         set_error $?
     fi
 
@@ -1341,7 +1384,7 @@ deploy_ppss () {
         exit 1
     fi
 
-    exec_cmd "mkdir $PPSS_HOME_DIR/$PPSS_NODE_STATUS"
+    exec_cmd "mkdir -p $PPSS_HOME_DIR/$PPSS_NODE_STATUS"
     
     KEY=`echo $SSH_KEY | cut -d " " -f 2` 
     if [ -z "$KEY" ] || [ ! -e "$KEY" ]
@@ -1389,6 +1432,19 @@ start_ppss_on_node () {
     NODE="$1"
     log DSPLY "Starting PPSS on node $NODE."
     ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 -o GlobalKnownHostsFile=./known_hosts "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
+    if [ ! "$?" == "0" ]
+    then
+        log ERROR "PPSS failed to start on node $NODE."
+    fi
+}
+
+init_ssh_server_socket () {
+
+        if [ ! -e "$SSH_SOCKET" ]
+        then
+            DIR=`dirname $SSH_SOCKET`
+            mkdir -p "$DIR"
+        fi
 }
 
 test_server () {
@@ -1396,20 +1452,15 @@ test_server () {
     # Testing if the remote server works as expected.
     if [ ! -z "$SSH_SERVER" ] 
     then 
-        if [ ! -e "$SSH_SOCKET" ]
-        then
-            DIR=`dirname $SSH_SOCKET`
-            mkdir -p "$DIR"
-        fi
+        init_ssh_server_socket
         
         exec_cmd "date >> /dev/null"
         check_status "$?" "$FUNCNAME" "Server $SSH_SERVER could not be reached"
-        
 
         ssh -N -M $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER &
         SSH_MASTER_PID="$!"
         log DEBUG "SSH Master pid is $SSH_MASTER_PID"
-        log DSPLY "Connected to server: $SSH_SERVER"
+        log INFO "Connected to server: $SSH_SERVER"
 
         does_file_exist "$PPSS_HOME_DIR/$PPSS_DIR"
         if [ ! "$?" = "0" ] && [ ! -z "$SSH_SERVER" ]
@@ -1420,7 +1471,6 @@ test_server () {
     else
         log DEBUG "No remote server specified, assuming stand-alone mode."
     fi
-
 }
 
 get_no_of_cpus () {
@@ -1675,6 +1725,10 @@ lock_item () {
 
     if [ "$INOTIFY" = "1" ] && [ "$DAEMON" = "1" ]
     then
+        #
+        # In daemon mode, there is no risk that processes try to process
+        # the same item. Therefore, locking is not required.
+        #
         return 0
     else
         ITEM="$1"
@@ -1894,6 +1948,20 @@ get_all_items () {
         fi
     fi
 
+    if [ "$RANDOMIZE" == "1" ] && [ "$MODE" != "status" ]
+    then
+        log DEBUG "Randomizing input file."
+        IFS_BACK="$IFS"
+        IFS=$'\n'
+        TMP_FILE="$PPSS_DIR/TMP-$RANDOM$RANDOM.txt"
+        for i in `cat $LISTOFITEMS`; do echo "$RANDOM $i"; done | sort | sed -E 's/^[0-9]+ //' > "$TMP_FILE"
+        mv "$TMP_FILE" "$LISTOFITEMS"
+        IFS="$IFS_BACK"
+    else
+        log DEBUG "Randomisation of input file disabled."
+    fi
+ 
+
     remove_processed_items_from_input_file
 
     if [ "$DAEMON" == "1" ]
@@ -1911,6 +1979,19 @@ get_all_items () {
         exit 1
     fi
 
+}
+
+are_all_items_locked () {
+
+    SIZE="$1"
+    NUMBER=`exec_cmd "ls -1 $ITEM_LOCK_DIR | wc -l"`
+    log DEBUG "$NUMBER of $SIZE items are locked."
+    if [ "$NUMBER" -ge "$SIZE" ]
+    then
+        return 0
+    else
+        return 1
+    fi
 }
 
 get_item () {
@@ -1948,6 +2029,18 @@ get_item () {
         log DEBUG "Counter $GLOBAL_COUNTER is greater than sizeof input $SIZE_OF_INPUT."
         return 1
     fi
+
+    #
+    # Quit if all items have been locked.
+    #
+    if are_all_items_locked "$SIZE_OF_INPUT"
+    then
+        log DEBUG "All items have been locked."
+        return 1
+    else
+        log DEBUG "There are still unlocked items."
+    fi
+    
 
     ITEM="$(sed -n $GLOBAL_COUNTER\p $LISTOFITEMS)"
 
@@ -2710,7 +2803,12 @@ get_status_of_nodes () {
     RESULT_FILE="$1"
     FAILED=0
 
-    ssh $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER cat "$PPSS_HOME_DIR/$PPSS_NODE_STATUS/*" > "$RESULT_FILE" 2>&1
+    ssh -q $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER cat "$PPSS_HOME_DIR/$PPSS_NODE_STATUS/*" > "$RESULT_FILE" 2>&1
+    if [ ! "$?" == "0" ]
+    then
+        log DSPLY "PPSS has not been started yet on nodes."
+        return 1
+    fi 
 
     IFS=$'\n'
 
@@ -2747,7 +2845,6 @@ show_status () {
     then
         SSH_KEY="-i $SSH_KEY"
     fi
-    
     get_all_items
 
     ITEMS=`wc -l $LISTOFITEMS | awk '{ print $1 }'`
@@ -2755,6 +2852,7 @@ show_status () {
     if [ ! -z "$ITEMS" ] && [ ! "$ITEMS" == "0" ]
     then
         PROCESSED=`exec_cmd "ls -1 $PPSS_HOME_DIR/$ITEM_LOCK_DIR 2>/dev/null | wc -l" 1` 2>&1 >> /dev/null
+        check_status "$?" "Could not get number of processed items."
         TMP_STATUS=$((100 * $PROCESSED / $ITEMS))
         log DSPLY "Status:\t\t$TMP_STATUS percent complete."
     else
@@ -2774,8 +2872,7 @@ show_status () {
     log DSPLY "---------------------------------------------------------"
     PROCESSED=0
 
-    RESULT_FILE="$RADOM$RANDOM.deleteme"
-    get_status_of_nodes "$RESULT_FILE"
+    get_status_of_nodes "RESULT_FILE"
 
 }
 
@@ -2804,7 +2901,7 @@ main () {
                     else
                         for NODE in `cat $NODES_FILE`
                         do
-                            start_ppss_on_node "$NODE"
+                            start_ppss_on_node "$NODE" &
                         done
                     fi
                     cleanup
@@ -2822,6 +2919,7 @@ main () {
                     LOGFILE=/dev/null
                     display_header
                     log DSPLY "Stopping PPSS on all nodes."
+                    test_server
                     exec_cmd "touch $STOP_SIGNAL"
                     cleanup
                     ;;
@@ -2849,6 +2947,12 @@ main () {
                     ;;
         deploy )
                     LOGFILE=ppss-deploy.txt
+                    if [ -e "$LOGFILE" ]
+                    then
+                        rm "$LOGFILE"
+                    fi
+            
+                    init_ssh_server_socket
                     display_header
                     log DSPLY "Deploying PPSS on nodes. See ppss-deploy.txt for details."
                     deploy_ppss
