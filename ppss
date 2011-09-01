@@ -154,7 +154,7 @@ showusage_normal () {
     echo 
     echo "|P|P|S|S| $SCRIPT_NAME $SCRIPT_VERSION"
     echo 
-    echo "PPSS is a Bash shell script that executes commands in parallel on a set"
+    echo "|P|P|S|S| is a Bash shell script that executes commands in parallel on a set"
     echo "of items, such as files in a directory, or lines in a file. The purpose" 
     echo "of PPSS is to make it simple to benefit from multiple CPUs or CPU cores."
     echo 
@@ -201,6 +201,8 @@ showusage_normal () {
     echo 
     echo -e "--email | -e       PPSS sends an e-mail if PPSS has finished. It is also used if processing"
     echo -e "                   of an item has failed (configurable, see -h). "
+    echo
+    echo -e "--debug            Enable debugging output to the |P|P|S|S| log file."
     echo 
     echo -e "--help             Extended help, including options for distributed mode."
     echo 
@@ -217,7 +219,7 @@ showusage_long () {
     echo 
     echo "|P|P|S|S| $SCRIPT_NAME $SCRIPT_VERSION"
     echo 
-    echo "PPSS is a Bash shell script that executes commands in parallel on a set  "
+    echo "|P|P|S|S| is a Bash shell script that executes commands in parallel on a set  "
     echo "of items, such as files in a directory, or lines in a file."
     echo 
     echo "Usage: $0 [ MODE ] [ options ]"
@@ -289,6 +291,10 @@ showusage_long () {
     echo -e "--md5|-M           Use MD5 to create unique file names for locking and log file names."
     echo -e "                   PPSS strips al non [:alnum:] characters of an item string and this may"
     echo -e "                   cause collisions. String ABC!@# and ABC^&* will become both ABC___"
+    echo
+    echo -e "--debug            Enable debugging output to the |P|P|S|S| log file."
+    echo 
+    echo 
     echo 
     echo -e "The following options are used for distributed execution of PPSS."
     echo 
@@ -335,7 +341,6 @@ showusage_long () {
     echo -e "--randomize | -R   Randomise which items to process by the client in distributed mode."
     echo -e "                   This makes sure that with many nodes, some clients spend their time"
     echo -e "                   trying to get a lock on an item."
-    echo
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
     echo -e "$0 -c 'lame ' -d /path/to/wavfiles -j " 
@@ -741,6 +746,10 @@ process_arguments () {
                             SCRIPT="$2"
                             add_var_to_config SCRIPT "$SCRIPT"
                             shift 2 ;;
+            --debug)
+                            PPSS_DEBUG="1"    
+                            add_var_to_config PPSS_DEBUG "$PPSS_DEBUG"
+                            shift 1 ;;
             --download)
                             DOWNLOAD_TO_NODE="1"    
                             add_var_to_config DOWNLOAD_TO_NODE "$DOWNLOAD_TO_NODE"
@@ -796,7 +805,7 @@ process_arguments () {
     if [ "$SRC_DIR" == "." ]
     then
         echo 
-        echo "PPSS is not designed to process items from within the directory"
+        echo "|P|P|S|S| is not designed to process items from within the directory"
         echo "it is being run. PPSS will start to process its own files from"
         echo "its working directory $PPSS_DIR which is probably not wat you"
         echo "want. Are you sure you want to continue?"
@@ -1366,9 +1375,9 @@ deploy () {
 
     if [ "$ERROR" == "0" ]
     then
-        log DSPLY "PPSS installed on node $NODE."
+        log DSPLY  "PPSS installed on node $NODE."
     else
-        log DSPLY "PPSS failed to install on $NODE."
+        log DSPLY  "|P|P|S|S| failed to install on $NODE."
     fi
 
     kill $SSH_PID
@@ -1434,7 +1443,7 @@ start_ppss_on_node () {
     ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 -o GlobalKnownHostsFile=./known_hosts "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
     if [ ! "$?" == "0" ]
     then
-        log ERROR "PPSS failed to start on node $NODE."
+        log ERROR  "|P|P|S|S| failed to start on node $NODE."
     fi
 }
 
@@ -2560,7 +2569,7 @@ terminate_listener () {
 
     if [ ! -z "$EMAIL" ]  
     then
-        echo "PPSS job finished." | mail -s "$HOSTNAME - PPSS has finished." "$EMAIL"
+        echo  "|P|P|S|S| job finished." | mail -s "$HOSTNAME - PPSS has finished." "$EMAIL"
         if [ ! "$?" = "0" ]
         then 
             log ERROR "Sending os status mail failed."
@@ -2806,7 +2815,7 @@ get_status_of_nodes () {
     ssh -q $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER cat "$PPSS_HOME_DIR/$PPSS_NODE_STATUS/*" > "$RESULT_FILE" 2>&1
     if [ ! "$?" == "0" ]
     then
-        log DSPLY "PPSS has not been started yet on nodes."
+        log DSPLY "|P|P|S|S| has not been started yet on nodes."
         return 1
     fi 
 
