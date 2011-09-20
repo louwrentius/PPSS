@@ -1805,12 +1805,14 @@ remove_processed_items_from_input_file () {
     #
     UNPROCESSED_ITEMS=""
 
+    log DSPLY "Removing processed items from list..."
+
     if [ -e "$LIST_OF_PROCESSED_ITEMS" ]
     then
         PROCESSED_ITEMS=`cat $LIST_OF_PROCESSED_ITEMS`
     fi
 
-    log DEBUG "Running $FUNCNAME"
+    log INFO "Running $FUNCNAME"
 
     if [ -z "$PROCESSED_ITEMS" ]
     then
@@ -1844,24 +1846,33 @@ remove_processed_items_from_input_file () {
 
     log DEBUG "Now removing processed items from input."
 
-    for x in $INPUTFILES
+    STATUS_COUNTER=0
+    TOTAL=`echo "$INPUTFILES" | wc -l`
+
+    for x in $PROCESSED_ITEMS
     do
         FILE_IS_PROCESSED=0
 
-        for y in $PROCESSED_ITEMS
+        for y in $INPUT_FILES
         do
-            if [ "$y" = "$x" ]
+            if [ "$y" == "$x" ]
             then
                 FILE_IS_PROCESSED=1
+            fi
+            ((STATUS_COUNTER++))
+            TMP=$((STATUS_COUNTER % 1000))
+            if [ "$TMP" == "0" ]
+            then
+                log DSPLY "Processed $STATUS_COUNTER of $TOTAL."
             fi
         done
 
         if [ "$FILE_IS_PROCESSED" = "0" ]
         then
-            log DEBUG "ITEM $x is not processed."
+            #log DEBUG "ITEM $x is not processed."
             unprocessed_stack_push "$x"
-        else
-            log DEBUG "ITEM $x is already processed!."
+        #else
+            #log DEBUG "ITEM $x is already processed!."
         fi
     done
     IFS="$oldIFS"
@@ -1869,6 +1880,8 @@ remove_processed_items_from_input_file () {
 }
 
 get_all_items () {
+
+    log DSPLY "Creating a list of all items to process..."
 
     if [ "$DAEMON" == "1" ] && [ "$INOTIFY" = "0" ]  && [ "$ENABLE_INPUT_LOCK" = "1" ]
     then
