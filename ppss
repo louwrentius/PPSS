@@ -341,6 +341,12 @@ showusage_long () {
     echo -e "--randomize | -R   Randomise which items to process by the client in distributed mode."
     echo -e "                   This makes sure that with many nodes, some clients spend their time"
     echo -e "                   trying to get a lock on an item."
+    echo
+    echo -e "--no-check         Do not check if items are already processed before processing them."
+    echo -e "                   This is usefull with a large number of items, since performing this"
+    echo -e "                   check in advance would take a very long time. Please note that during"
+    echo -e "                   the actual processing of items, PPSS will check if an item is processed."
+    echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
     echo -e "$0 -c 'lame ' -d /path/to/wavfiles -j " 
@@ -1803,7 +1809,6 @@ remove_processed_items_from_input_file () {
     # This function removes all items that have already been processed.
     # Processed items have a lock dir in the PPPSS_ITEM_LOCK_DIR.
     #
-    UNPROCESSED_ITEMS=""
 
     log DSPLY "Removing processed items from list..."
 
@@ -1841,42 +1846,10 @@ remove_processed_items_from_input_file () {
 
     INPUTFILES=`list_all_input_items`
 
-    oldIFS=$IFS # save the field separator
-    IFS=$'\n' # new field separator, the end of line  
-
-    log DEBUG "Now removing processed items from input."
-
-    STATUS_COUNTER=0
-    TOTAL=`echo "$INPUTFILES" | wc -l`
-
-    for x in $PROCESSED_ITEMS
-    do
-        FILE_IS_PROCESSED=0
-
-        for y in $INPUT_FILES
-        do
-            if [ "$y" == "$x" ]
-            then
-                FILE_IS_PROCESSED=1
-            fi
-            ((STATUS_COUNTER++))
-            TMP=$((STATUS_COUNTER % 1000))
-            if [ "$TMP" == "0" ]
-            then
-                log DSPLY "Processed $STATUS_COUNTER of $TOTAL."
-            fi
-        done
-
-        if [ "$FILE_IS_PROCESSED" = "0" ]
-        then
-            #log DEBUG "ITEM $x is not processed."
-            unprocessed_stack_push "$x"
-        #else
-            #log DEBUG "ITEM $x is already processed!."
-        fi
-    done
-    IFS="$oldIFS"
-    echo "$UNPROCESSED_ITEMS" > "$LISTOFITEMS"
+    TMP_FILE=$RANDOM$RANDOM$RANDOM$RAMDOM
+    comm -3 $LISTOFITEMS $LIST_OF_PROCESSED_ITEMS > $TMP_FILE
+    mv $TMP_FILE $LISTOFITEMS 
+    log DSPLY "Done. Continue processing remaining items."
 }
 
 get_all_items () {
