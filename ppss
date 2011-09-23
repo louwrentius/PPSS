@@ -1852,7 +1852,7 @@ remove_processed_items_from_input_file () {
     cat "$LISTOFITEMS" | sort > "$LIST_SORTED"
     cat "$LIST_OF_PROCESSED_ITEMS" | sort > "$PROCESSED_SORTED"
     comm -3 $LIST_SORTED $PROCESSED_SORTED > $OUT_FILE
-    mv "§$TMP_FILE" "$LISTOFITEMS"
+    mv "$TMP_FILE" "$LISTOFITEMS"
 }
 
 get_all_items () {
