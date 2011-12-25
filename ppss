@@ -2127,7 +2127,6 @@ commando () {
         ERR_STATE="$?"
     fi
 
-
     #
     # If recursion is used, a file name of an item may not be unique.
     # The same filename can be used for files in differen directories.
@@ -2149,7 +2148,12 @@ commando () {
             then
                 OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$HASH"
             else
-                OUTPUT_DIR="$REMOTE_OUTPUT_DIR/$ITEM_DIR_NAME"
+                if [ -z "$REMOTE_OUTPUT_DIR" ]
+                then
+                    OUTPUT_DIR="$PPSS_LOCAL_OUTPUT"
+                else
+                    OUTPUT_DIR="$REMOTE_OUTPUT_DIR/$ITEM_DIR_NAME"
+                fi
             fi
         else
             ITEM_DIR_NAME="$SRC_DIR"
@@ -2171,7 +2175,12 @@ commando () {
         then
             OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$ITEM_ESCAPED"
         else
-            OUTPUT_DIR="$REMOTE_OUTPUT_DIR"
+            if [ -z "$REMOTE_OUTPUT_DIR" ]
+            then
+                OUTPUT_DIR="$PPSS_LOCAL_OUTPUT"
+            else
+                OUTPUT_DIR="$REMOTE_OUTPUT_DIR"
+            fi
         fi
     fi
 
@@ -2230,7 +2239,8 @@ commando () {
     then
         log DEBUG "Creating local output dir $OUTPUT_DIR"
         mkdir -p "$OUTPUT_DIR"
-    fi
+    fi    
+    
     
     ERROR=""
     #

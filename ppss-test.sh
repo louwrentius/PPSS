@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DEBUG="$1"
-VERSION="2.90"
+VERSION="2.95"
 TMP_DIR="/tmp/ppss"
 PPSS=./ppss
 PPSS_DIR=ppss_dir
@@ -26,10 +26,10 @@ cleanup () {
         done
     fi
 
-        if [ ! -z "$TMP_DIR" ]
-        then
-            rm -rf "/$TMP_DIR"   
-        fi
+       if [ ! -z "$TMP_DIR" ] && [ -e "$TMP_DIR" ]
+       then
+           rm -rf "$TMP_DIR"   
+       fi
 }
 
 parseJobStatus () {
@@ -62,7 +62,7 @@ oneTimeSetUp () {
 
     if [ ! -e "$TMP_DIR" ]
     then
-        mkdir "$TMP_DIR"
+        mkdir -p "$TMP_DIR"
     fi
 
     cleanup
@@ -96,10 +96,21 @@ createDirectoryWithSomeFiles () {
     ROOT_DIR=$TMP_DIR/root
     CHILD_1=$ROOT_DIR/child_1
     CHILD_2=$ROOT_DIR/child_2
+    
+    if [ ! -e "$ROOT_DIR" ]
+    then
+        mkdir -p "$ROOT_DIR" 
+    fi
 
-    mkdir -p "$ROOT_DIR" 
-    mkdir -p "$CHILD_1"
-    mkdir -p "$CHILD_2"
+    if [ ! -e "$CHILD_1" ]
+    then
+        mkdir -p "$CHILD_1"
+    fi
+
+    if [ ! -e "$CHILD_2" ]
+    then
+        mkdir -p "$CHILD_2"
+    fi
 
     for x in {1..10}
     do
@@ -228,7 +239,7 @@ testNumberOfLogfiles () {
 
     createSpecialFilenames
     init_get_all_items $TMP_DIR/root 1
-    COMMAND='echo ' 
+    COMMAND='echo hoi' 
     while get_item
     do
         commando "$ITEM"
