@@ -26,7 +26,7 @@
 trap 'kill_process' SIGINT 
 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.95"
+SCRIPT_VERSION="2.96"
 
 #
 # The first argument to this script can be a mode.
@@ -2254,8 +2254,12 @@ commando () {
 #--># The actual execution of the command as specified by
 #--># the -c option.
 #-->#
+
+    # Check for "$ITEM" or "${ITEM" in the command line.
+    # ${ITEM} allows the usage of string operations.
+
     BEFORE=`get_time_in_seconds`
-    `echo $COMMAND | grep -i '$ITEM' >> /dev/null 2>&1`
+    `echo $COMMAND | grep -E -i '\$\{ITEM' >> /dev/null 2>&1`
     RETVAL="$?"
     if [ "$RETVAL" = "0" ]
     then 
@@ -2542,7 +2546,7 @@ terminate_listener () {
 }
 
 inotify_listener () {
-    inotifywait "$SRC_DIR" -m -e close -q --format '%w%f' | \
+    inotifywait "$SRC_DIR" -m -r -e close -q --format '%w%f' | \
     while read -r line
     do
         if [ ! -d "$line" ]
