@@ -354,12 +354,10 @@ exec_cmd () {
     then
         if [ -z "$NOMP" ]
         then
-            #log DEBUG "REMOTE EXEC"
             ssh $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER $CMD
             STATUS=$?
         elif [ "$NOMP" == "1" ]
         then
-            #log DEBUG "REMOTE EXEC NO MP"
             ssh $SSH_OPTS_NOMP $SSH_KEY $USER@$SSH_SERVER $CMD
             STATUS=$?
         fi
@@ -380,10 +378,8 @@ does_file_exist () {
     RES=`exec_cmd "ls -1 $FILE" 2>&1`
     if [ "$?" = "0" ] 
     then
-        #log DEBUG "$FILE does exist"
         return 0
     else 
-        #log DEBUG "$FILE does not exist"
         return 1
     fi
 }
@@ -1668,8 +1664,6 @@ upload_item () {
     if [ "$RECURSION" = "1" ]
     then 
         log DEBUG "Recursive copy is enabled."
-        log DEBUG "REMOTE_OUTPUT_DIR = $REMOTE_OUTPUT_DIR"
-        log DEBUG "REMOTE DEST DIR = $REMOTE_DEST_DIR"
         TMP_DESTINATION="$REMOTE_OUTPUT_DIR/$REMOTE_DEST_DIR" 
     else
         log DEBUG "Recursive copy is disabled."
@@ -1687,8 +1681,7 @@ upload_item () {
     then
         log DEBUG "Secure copy is enabled."
         log DEBUG "Copy contents of $LOCAL_SRC_DIR to server at $DESTINATION"
-        log DEBUG "scp $SSH_OPTS $SSH_KEY $LOCAL_SRC_DIR/* $USER@$SSH_SERVER:$DESTINATION"
-        scp $SSH_OPTS $SSH_KEY $LOCAL_SRC_DIR/* $USER@$SSH_SERVER:"$DESTINATION" >> scplog.txt 2>&1
+        scp $SSH_OPTS $SSH_KEY $LOCAL_SRC_DIR/* $USER@$SSH_SERVER:"$DESTINATION" 
         ERROR="$?"
         if [ ! "$ERROR" == "0" ]
         then
@@ -1698,10 +1691,8 @@ upload_item () {
             rm -rf ./"$LOCAL_SRC_DIR"
         fi
     else    
-        log DEBUG "Secure copy is disabled."
-        log DEBUG `pwd`
-        cp "$LOCAL_SRC_DIR"/* "$TMP_DESTINATION" >> scplog.txt 2>&1
-        log DEBUG "cp $LOCAL_SRC_DIR/* $DESTINATION >> scplog.txt 2>&1"
+        log DEBUG "Secure copy is disabled - using regular cp."
+        cp "$LOCAL_SRC_DIR"/* "$TMP_DESTINATION"
         if [ ! "$?" == "0" ]
         then
             log DEBUG "ERROR - uploading of $LOCAL_SRC_DIR via CP to $DESTINATION failed."
@@ -2328,7 +2319,6 @@ commando () {
 
     if [ ! -z "$SSH_SERVER" ]
     then
-        log DEBUG "Uploading item log file $ITEM_LOG_FILE to master $PPSS_HOME_DIR/$JOB_LOG_DIR"
         scp -q $SSH_OPTS $SSH_KEY "$ITEM_LOG_FILE" $USER@$SSH_SERVER:$PPSS_HOME_DIR/$JOB_LOG_DIR
         if [ ! "$?" ]
         then
