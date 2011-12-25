@@ -219,6 +219,7 @@ showusage_basic () {
     echo
     echo -e "--disable-inotify  Linux users can use real-time inotify filesystem events when using"
     echo -e "                   daemon mode. Requires inotify-tools. Enabled by default if available."
+    echo -e "                   Automatically disabled if NFS is used as the daeon source dir."
     echo
     echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
     echo -e "                   used. If this is not prefered, this can be disabled with this option "
@@ -1812,9 +1813,9 @@ remove_processed_items_from_input_file () {
 
     INPUTFILES=`list_all_input_items`
 
-    OUT_FILE=$RANDOM$RANDOM$RANDOM$RAMDOM
-    LIST_SORTED=$RANDOM$RANDOM$RANDOM$RANDOM
-    PROCESSED_SORTED=$RANDOM$RANDOM$RANDOM$RANDOM
+    OUT_FILE=$PPSS_DIR/out-file-$RANDOM$RANDOM$RANDOM$RAMDOM
+    LIST_SORTED=$PPSS_DIR/list-sorted-$RANDOM$RANDOM$RANDOM$RANDOM
+    PROCESSED_SORTED=$PPSS_DIR/processed-sorted-$RANDOM$RANDOM$RANDOM$RANDOM
     cat "$LISTOFITEMS" | sort > "$LIST_SORTED"
     cat "$LIST_OF_PROCESSED_ITEMS" | sort > "$PROCESSED_SORTED"
     comm -3 $LIST_SORTED $PROCESSED_SORTED > $OUT_FILE
@@ -2546,7 +2547,7 @@ inotify_listener () {
     do
         if [ ! -d "$line" ]
         then
-            echo "$line" >> "$FIFO"
+            echo "$line" > "$FIFO"
         fi
     done
 }
