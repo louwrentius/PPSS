@@ -66,7 +66,10 @@ LISTOFITEMS="$PPSS_DIR/INPUT_FILE-$PID"
 JOB_LOG_DIR="$PPSS_DIR/job_log"                           # Directory containing log files of processed items.
 LOGFILE="$PPSS_DIR/ppss-log-$PID.txt"                     # General PPSS log file. Contains lots of info.
 FAILED_ITEMS_COUNTER=0
-QUIET="0"
+if [ -z "$QUIET" ]
+then
+    QUIET="0"
+fi
 STOP="0"                                                  # STOP job.
 MAX_DELAY="0"                                             # MAX DELAY between jobs.
 MAX_LOCK_DELAY="9"                                        #
@@ -213,6 +216,9 @@ showusage_basic () {
     echo -e "--daemon           Daemon mode. Do not exit after items are professed, but keep looking "
     echo -e "                   for new items and process them. Read the manual how to use this!"
     echo -e "                   See --help for important additional options regarding daemon mode."
+    echo
+    echo -e "--disable-inotify  Linux users can use real-time inotify filesystem events when using"
+    echo -e "                   daemon mode. Requires inotify-tools. Enabled by default if available."
     echo
     echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
     echo -e "                   used. If this is not prefered, this can be disabled with this option "
@@ -470,43 +476,41 @@ is_var_empty () {
 
 detect_source_dir_nfs_exported () {
     
-    log DEBUG "Executing $FUNCNAME"
+    #log DEBUG "Executing $FUNCNAME"
 
-    if [ -e /etc/exports ]
-    then
-        log DEBUG "NFS /etc/exports found."
-        NFS=0
-        EXPORTS=`cat /etc/exports | grep ^/ | awk '{ print $1 }'`
-        
-        for export in $EXPORTS
+    NFS=0
+    NFS_MOUNTED_FS=`mount | grep ":" | cut -d ":" -f 2 | awk '{ print $3 }'`
+
+    for mount in $NFS_MOUNTED_FS
+    do
+    
+        #
+        # If this for loop matches anything, the SRC_DIR is NFS exported.
+        # inotify does not play well with NFS. So it must be disabled.
+        #
+        DIRECTORY="$SRC_DIR"
+        while true
         do
-            #
-            # If this for loop matches anything, the SRC_DIR is NFS exported.
-            # inotify does not play well with NFS. So it must be disabled.
-            #
-            DIRECTORY=`dirname "$SRC_DIR"`
-            while true
-            do
-                if [ ! "$DIRECTORY" = "/" ] && [ ! "$DIRECTORY" = "." ]
+            #log DEBUG "NFS TEST: $mount vs. $DIRECTORY"
+            if [ ! "$DIRECTORY" = "/" ] && [ ! "$DIRECTORY" = "." ]
+            then
+                if [ "$mount" = "$DIRECTORY" ]
                 then
-                    if [ "$export" = "$DIRECTORY" ]
-                    then
-                        NFS=1
-                        break
-                    fi
-                else
+                    NFS=1
                     break
                 fi
-                DIRECTORY=`dirname "$DIRECTORY"`
-            done
+            else
+                break
+            fi
+            DIRECTORY=`dirname "$DIRECTORY"`
         done
-    fi
+    done
     if [ "$NFS" = "1" ]
     then
-        log INFO "Source directory is NFS exported. Disabling inotify."
+        #log DEBUG "Source directory is NFS exported. Disabling inotify."
         return 1
     else
-        log INFO "Source directory is NOT NFS exported. Enabling inotify."
+        #log DEBUG "Source directory is NOT NFS exported. Enabling inotify."
         return 0
     fi 
 }
@@ -2537,13 +2541,12 @@ terminate_listener () {
 }
 
 inotify_listener () {
-
     inotifywait "$SRC_DIR" -m -e close -q --format '%w%f' | \
     while read -r line
     do
         if [ ! -d "$line" ]
         then
-            echo "$line" > "$FIFO"
+            echo "$line" >> "$FIFO"
         fi
     done
 }
