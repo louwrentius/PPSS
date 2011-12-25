@@ -2145,19 +2145,34 @@ commando () {
             ITEM_DIR_NAME=`dirname "$ITEM" | sed s:$SRC_DIR::g`
             ITEM_BASE_NAME=`basename "$ITEM"`
             HASH=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
-            OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$HASH"
+            if [ "$UPLOAD_TO_SERVER" == "1" ]
+            then
+                OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$HASH"
+            else
+                OUTPUT_DIR="$REMOTE_OUTPUT_DIR/$ITEM_DIR_NAME"
+            fi
         else
             ITEM_DIR_NAME="$SRC_DIR"
             ITEM_BASE_NAME="$ITEM"
             escape_item "$ITEM_BASE_NAME"
-            OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$ITEM_ESCAPED"
+            if [ "$UPLOAD_TO_SERVER" == "1" ]
+            then
+                OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$ITEM_ESCAPED"
+            else
+                OUTPUT_DIR="$REMOTE_OUTPUT_DIR"
+            fi
         fi
     else
         VIRTUAL="1"
         ITEM_DIR_NAME=""
         ITEM_BASE_NAME="$ITEM"
         escape_item "$ITEM_BASE_NAME"
-        OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$ITEM_ESCAPED"
+        if [ "$UPLOAD_TO_SERVER" == "1" ]
+        then
+            OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$ITEM_ESCAPED"
+        else
+            OUTPUT_DIR="$REMOTE_OUTPUT_DIR"
+        fi
     fi
 
     OUTPUT_FILE="$ITEM_BASE_NAME"
@@ -2190,7 +2205,6 @@ commando () {
         fi
     fi
     
-
     #
     # Create the log file containing the output of the command.
     #
