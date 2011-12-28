@@ -317,11 +317,6 @@ showusage_extended_body () {
     echo -e "                   This makes sure that with many nodes, it is prevented that some"
     echo -e "                   clients spend all their time trying to get a lock on an item."
     echo
-    echo -e "--no-check         Do not check if items are already processed before processing them."
-    echo -e "                   This is usefull with a large number of items, since performing this"
-    echo -e "                   check in advance would take a very long time. Please note that during"
-    echo -e "                   the actual processing of items, PPSS will check if an item is processed."
-    echo 
     echo -e "Example: encoding some wav files to mp3 using lame:"
     echo 
     echo -e "$0 -c 'lame ' -d /path/to/wavfiles -j " 
@@ -1342,7 +1337,7 @@ deploy () {
     then
         log DSPLY  "PPSS installed on node $NODE."
     else
-        log DSPLY  "|P|P|S|S| failed to install on $NODE."
+        log DSPLY  "PPSS failed to install on $NODE."
     fi
 
     kill $SSH_PID
@@ -1785,7 +1780,7 @@ remove_processed_items_from_input_file () {
         PROCESSED_ITEMS=$(cat $LIST_OF_PROCESSED_ITEMS)
     fi
 
-    log INFO "Running $FUNCNAME"
+    log DEBUG "Running $FUNCNAME"
 
     if [[ -z "$PROCESSED_ITEMS" ]] 
     then
@@ -1942,7 +1937,6 @@ get_all_items () {
         cleanup 
         exit 1
     fi
-
 }
 
 are_all_items_locked () {
