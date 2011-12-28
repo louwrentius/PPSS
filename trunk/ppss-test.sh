@@ -154,7 +154,7 @@ testMD5 () {
 init_get_all_items () {
 
     DIR="$1"
-    RECURSION="$2"
+    TRAVERSAL="$2"
     createDirectoryWithSomeFiles
     create_working_directory
     export SRC_DIR=$DIR
@@ -234,6 +234,23 @@ testNumberOfItems () {
     assertEquals "Input file and actual files not the same!" "$RES1" "$RES2"
     rename-ppss-dir $FUNCNAME
 }
+
+
+testInvalidProcessingOfitemVariable() {
+
+    createSpecialFilenames
+    init_get_all_items $TMP_DIR/root 1
+    COMMAND='echo $ITEM'
+    while get_item
+    do
+        commando "$ITEM"
+    done
+    RESULT=$(grep '$ITEM' $PPSS_DIR/job_log/*)
+    EXPECTED=""
+    assertEquals "Got incorrect processing of ITEM variable." "$EXPECTED" "$RESULT"
+    rename-ppss-dir $FUNCNAME
+}
+
 
 testNumberOfLogfiles () {
 
