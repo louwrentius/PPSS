@@ -26,7 +26,7 @@
 trap 'kill_process' SIGINT 
 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.96"
+SCRIPT_VERSION="2.97"
 
 #
 # The first argument to this script can be a mode.
@@ -34,7 +34,7 @@ SCRIPT_VERSION="2.96"
 MODES="node start config stop pause continue deploy status erase kill"
 for x in $MODES
 do
-    if [ "$x" == "$1" ]
+    if [[ "$x" == "$1" ]] 
     then
         MODE="$1"
         shift
@@ -46,14 +46,14 @@ done
 # The working directory of PPSS can be set with
 # export PPSS_DIR=/path/to/workingdir
 #
-if [ -z "$PPSS_DIR" ]
+if [[ -z "$PPSS_DIR" ]] 
 then
     PPSS_DIR="ppss_dir"
 fi
 
 CONFIG=""
-HOSTNAME="`hostname`"
-ARCH="`uname`"
+HOSTNAME="$(hostname)"
+ARCH="$(uname)"
 PPSS_HOME_DIR="ppss-home"
 SOURCED="$0"
 
@@ -66,7 +66,7 @@ LISTOFITEMS="$PPSS_DIR/INPUT_FILE-$PID"
 JOB_LOG_DIR="$PPSS_DIR/job_log"                           # Directory containing log files of processed items.
 LOGFILE="$PPSS_DIR/ppss-log-$PID.txt"                     # General PPSS log file. Contains lots of info.
 FAILED_ITEMS_COUNTER=0
-if [ -z "$QUIET" ]
+if [[ -z "$QUIET" ]] 
 then
     QUIET="0"
 fi
@@ -91,6 +91,7 @@ LOCAL_LOCKING="1"
 LIST_OF_PROCESSED_ITEMS="$PPSS_DIR/LIST_OF_PROCESSED_ITEMS"
 PROCESSED_ITEMS=""
 UNPROCESSED_ITEMS=""
+FAILED_ITEMS="$PPSS_DIR/LIST_OF_FAILED_ITEMS"
 ACTIVE_WORKERS="0"
 DAEMON_POLLING_INTERVAL="10"
 STAT=""
@@ -141,9 +142,9 @@ showusage_short () {
     echo
     echo "|P|P|S|S| $SCRIPT_NAME $SCRIPT_VERSION"
     echo
-    echo "usage: $0 [ -d <sourcedir> | -f <sourcefile> ]  [ -c '<command> \"\$ITEM\"' ]"
-    echo "                 [ -C <configfile> ] [ -j ] [ -l <logfile> ] [ -p <# jobs> ]"
-    echo "                 [ -q ] [ -D <delay> ] [ -h ] [ --help ] [ -r ] [ --daemon ]" 
+    echo "usage: $0 [[ -d <sourcedir> | -f <sourcefile> ]]  [[ -c '<command> \"\$ITEM\"' ]] "
+    echo "                 [[ -C <configfile> ]] [[ -j ]] [[ -l <logfile> ]] [[ -p <# jobs> ]] "
+    echo "                 [[ -q ]] [[ -D <delay> ]] [[ -h ]] [[ --help ]] [[ -r ]] [[ --daemon ]] " 
     echo
     echo "Examples:"
     echo "                 $0 -d /dir/with/some/files -c 'gzip '" 
@@ -183,7 +184,7 @@ showusage_head () {
 
 showusage_basic () {
 
-    echo "Usage $0 [ options ]"
+    echo "Usage $0 [[ options ]] "
     echo
     echo -e "--command | -c     Command to execute. Syntax: '<command> ' including the single quotes."
     echo -e "                   Example: -c 'ls -alh '. It is also possible to specify where an item "
@@ -252,7 +253,7 @@ showusage_extended_head () {
     echo "PPSS is a Bash shell script that executes commands in parallel on a set  "
     echo "of items, such as files in a directory, or lines in a file."
     echo 
-    echo "Usage: $0 [ MODE ] [ options ]"
+    echo "Usage: $0 [[ MODE ]] [[ options ]] "
     echo 
     echo "Modes are optional and mainly used for running in distributed mode. Modes are:"
     echo 
@@ -357,13 +358,13 @@ exec_cmd () {
         CMD="bash $CMD"
     fi
 
-    if [ ! -z "$SSH_SERVER" ] 
+    if [[ ! -z "$SSH_SERVER" ]] 
     then
-        if [ -z "$NOMP" ]
+        if [[ -z "$NOMP" ]] 
         then
             ssh $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER $CMD
             STATUS=$?
-        elif [ "$NOMP" == "1" ]
+        elif [[ "$NOMP" == "1" ]] 
         then
             ssh $SSH_OPTS_NOMP $SSH_KEY $USER@$SSH_SERVER $CMD
             STATUS=$?
@@ -382,8 +383,8 @@ does_file_exist () {
     # this function makes remote or local checking of existence of items transparent.
     #
     FILE="$1"
-    RES=`exec_cmd "ls -1 $FILE" 2>&1`
-    if [ "$?" = "0" ] 
+    RES=$(exec_cmd "ls -1 $FILE" 2>&1)
+    if [[ "$?" == "0" ]] 
     then
         return 0
     else 
@@ -397,7 +398,7 @@ check_for_interrupt () {
     # PPSS can be interupted with a stop or pause command.
     #
     does_file_exist "$STOP_SIGNAL"
-    if [ "$?" = "0" ]
+    if [[ "$?" == "0" ]] 
     then
         set_status "STOPPED" "$FAILED_ITEMS_COUNTER"
         log INFO "STOPPING job. Stop signal found."
@@ -406,7 +407,7 @@ check_for_interrupt () {
     fi
 
     does_file_exist "$PAUSE_SIGNAL"
-    if [ "$?" = "0" ]
+    if [[ "$?" == "0" ]] 
     then
         set_status "PAUSED" "$FAILED_ITEMS_COUNTER"
         log INFO "PAUSE: sleeping for $PAUSE_DELAY SECONDS."
@@ -423,31 +424,31 @@ cleanup () {
 
     for x in $MODES
     do
-        if [ "$x" == "$MODE" ]
+        if [[ "$x" == "$MODE" ]] 
         then
-            if [ "$x" != "node" ]
+            if [[ "$x" != "node" ]] 
             then
                 rm -rf "$PPSS_DIR"
             fi
         fi
     done
     
-    if [ -e "$FIFO" ]
+    if [[ -e "$FIFO" ]] 
     then 
         rm "$FIFO"
     fi
 
-    if [ -e "$FIFO_LISTENER" ]
+    if [[ -e "$FIFO_LISTENER" ]] 
     then 
         rm "$FIFO_LISTENER"
     fi
 
-    if [ -e "$SSH_SOCKET" ]
+    if [[ -e "$SSH_SOCKET" ]] 
     then
         rm -rf "$SSH_SOCKET"
     fi
     
-    if [ ! -z "$SSH_MASTER_PID" ]
+    if [[ ! -z "$SSH_MASTER_PID" ]] 
     then
         kill "$SSH_MASTER_PID"
     fi
@@ -455,7 +456,7 @@ cleanup () {
 
 add_var_to_config () {
     
-    if [ "$MODE" == "config" ]
+    if [[ "$MODE" == "config" ]] 
     then
 
         VAR="$1"
@@ -467,7 +468,7 @@ add_var_to_config () {
 
 is_var_empty () {
 
-    if [ -z "$1" ]
+    if [[ -z "$1" ]] 
     then
         showusage_
         cleanup
@@ -480,7 +481,7 @@ detect_source_dir_nfs_exported () {
     #log DEBUG "Executing $FUNCNAME"
 
     NFS=0
-    NFS_MOUNTED_FS=`mount | grep ":" | cut -d ":" -f 2 | awk '{ print $3 }'`
+    NFS_MOUNTED_FS=$(mount | grep ":" | cut -d ":" -f 2 | awk '{ print $3 }')
 
     for mount in $NFS_MOUNTED_FS
     do
@@ -493,9 +494,9 @@ detect_source_dir_nfs_exported () {
         while true
         do
             #log DEBUG "NFS TEST: $mount vs. $DIRECTORY"
-            if [ ! "$DIRECTORY" = "/" ] && [ ! "$DIRECTORY" = "." ]
+            if [[ $DIRECTORY != [/.]* ]] 
             then
-                if [ "$mount" = "$DIRECTORY" ]
+                if [[ "$mount" == "$DIRECTORY" ]] 
                 then
                     NFS=1
                     break
@@ -503,10 +504,10 @@ detect_source_dir_nfs_exported () {
             else
                 break
             fi
-            DIRECTORY=`dirname "$DIRECTORY"`
+            DIRECTORY=$(dirname "$DIRECTORY")
         done
     done
-    if [ "$NFS" = "1" ]
+    if [[ "$NFS" == "1" ]] 
     then
         #log DEBUG "Source directory is NFS exported. Disabling inotify."
         return 1
@@ -518,7 +519,7 @@ detect_source_dir_nfs_exported () {
 
 detect_inotify () {
 
-    if [ -e /usr/bin/inotifywait ] && [ ! "$INOTIFY" = "0" ] && detect_source_dir_nfs_exported
+    if [[ -e /usr/bin/inotifywait && "$INOTIFY" != "0" ]] && detect_source_dir_nfs_exported
     then
         INOTIFY=1
     else
@@ -532,13 +533,13 @@ process_arguments () {
     # Process any command-line options that are specified."
     #
 
-    if [ "$#" = "0" ]
+    if [[ "$#" == "0" ]] 
     then
         showusage_short
         exit 1
     fi
 
-    while [ $# -gt 0 ]
+    while [[ $# -gt 0 ]] 
     do
         case $1 in
 
@@ -546,13 +547,13 @@ process_arguments () {
                             CONFIG="$2"
                             is_var_empty "$CONFIG" 
 
-                            if [ "$MODE" == "config" ]
+                            if [[ "$MODE" == "config" ]] 
                             then
-                                if [ -e "$CONFIG" ]
+                                if [[ -e "$CONFIG" ]] 
                                 then
                                     echo "Do want to overwrite existing config file? [y/n]"
                                     read yn
-                                    if [ "$yn" == "y" ] || [ "$yn" == "yes" ]
+                                    if [[ "$yn" == "y" ]] || [[ "$yn" == "yes" ]] 
                                     then
                                         rm "$CONFIG"
                                     else
@@ -563,21 +564,21 @@ process_arguments () {
                                 fi
                             fi
 
-                            if [ ! "$MODE" == "config" ]
+                            if [[ "$MODE" != "config" ]] 
                             then
                                 source $CONFIG
                             fi
 
-                            if [ ! -z "$SSH_KEY" ]
+                            if [[ ! -z "$SSH_KEY" ]] 
                             then
                                 SSH_KEY="-i $SSH_KEY"
                             fi
 
-                            if [ ! -e "./known_hosts" ]
+                            if [[ ! -e "./known_hosts" ]] 
                             then
-                                if [ -e $SSH_KNOWN_HOSTS ] 
+                                if [[ -e $SSH_KNOWN_HOSTS ]] 
                                 then
-                                    if [ ! "$SSH_KNOWN_HOSTS" == "known_hosts" ] 
+                                    if [[ "$SSH_KNOWN_HOSTS" != "known_hosts" ]] 
                                     then
                                         cat $SSH_KNOWN_HOSTS > ./known_hosts
                                     fi
@@ -643,7 +644,7 @@ process_arguments () {
               --command|-c ) 
                             COMMAND="$2"
                             is_var_empty "$COMMAND"
-                            if [ "$MODE" == "config" ]
+                            if [[ "$MODE" == "config" ]] 
                             then
                                 COMMAND=\'$COMMAND\'
                                 add_var_to_config COMMAND "$COMMAND"
@@ -685,7 +686,7 @@ process_arguments () {
                             SSH_KEY="$2"
                             is_var_empty "$SSH_KEY"
                             add_var_to_config SSH_KEY "$SSH_KEY"
-                            if [ ! -z "$SSH_KEY" ]
+                            if [[ ! -z "$SSH_KEY" ]] 
                             then
                                 SSH_KEY="-i $SSH_KEY"
                             fi
@@ -729,7 +730,7 @@ process_arguments () {
                             add_var_to_config DOWNLOAD_TO_NODE "$DOWNLOAD_TO_NODE"
                             shift 1 ;;
             --upload)
-                            if [ -z "$REMOTE_OUTPUT_DIR" ]
+                            if [[ -z "$REMOTE_OUTPUT_DIR" ]] 
                             then
                                 echo "ERROR: no server-side output directory specified with -o"
                                 exit 1
@@ -760,7 +761,7 @@ process_arguments () {
         esac
     done
 
-    if [ -z "$SRC_DIR" ] && [ -z "$INPUT_FILE" ]
+    if [[ -z "$SRC_DIR" && -z "$INPUT_FILE" ]] 
     then
         showusage_short
         echo
@@ -768,7 +769,7 @@ process_arguments () {
         exit 1
     fi
 
-    if [ ! -e "$SRC_DIR" ] && [ -z "$MODE" ] && [ -z "$INPUT_FILE" ]
+    if [[ ! -e "$SRC_DIR" && -z "$MODE" && -z "$INPUT_FILE" ]]
     then
         showusage_short
         echo
@@ -776,7 +777,7 @@ process_arguments () {
         exit 1
     fi
     
-    if [ "$SRC_DIR" == "." ]
+    if [[ "$SRC_DIR" == "." ]] 
     then
         echo 
         echo "|P|P|S|S| is not designed to process items from within the directory"
@@ -785,13 +786,13 @@ process_arguments () {
         echo "want. Are you sure you want to continue?"
         echo 
         read YN
-        if [ ! "$YN" == "y" ] || [ ! "$YN" == "Y" ]
+        if [[ "$YN" != "y" && "$YN" != "Y" ]]
         then
             exit 1
         fi
     fi
 
-    if [ "$DAEMON" == "1" ] && [ -z "$SRC_DIR" ]
+    if [[ "$DAEMON" == "1" && -z "$SRC_DIR" ]]
     then
         showusage_short
         echo
@@ -814,7 +815,7 @@ display_header () {
 
 create_working_directory () {
 
-    if [ ! -e "$PPSS_DIR" ]
+    if [[ ! -e "$PPSS_DIR" ]] 
     then
         mkdir -p "$PPSS_DIR"
     fi
@@ -826,7 +827,7 @@ expand_str () {
     LENGTH=$TYPE_LENGTH
     SPACE=" "
 
-    while [ "${#STR}" -lt "$LENGTH" ]
+    while [[ "${#STR}" -lt "$LENGTH" ]] 
     do
         STR=$STR$SPACE
     done
@@ -836,9 +837,9 @@ expand_str () {
 
 are_we_sourced () {
 
-    RES=`basename $SOURCED`
+    RES=$(basename $SOURCED)
     
-    if [ "$RES" = "ppss" ]
+    if [[ "$RES" == "ppss" ]] 
     then
         return 1
     else
@@ -848,12 +849,12 @@ are_we_sourced () {
 
 get_time_in_seconds () {
 
-    if [ "$ARCH" == "SunOS" ]
+    if [[ "$ARCH" == "SunOS" ]] 
     then
         #
         # Dirty hack because this ancient operating system does not support +%s...
         #
-        THE_TIME=`truss /usr/bin/date 2>&1 | grep ^time | awk '{ print $3 }'`
+        THE_TIME=$(truss /usr/bin/date 2>&1 | grep ^time | awk '{ print $3 }')
     else
         THE_TIME="$(date +%s)"
     fi
@@ -871,7 +872,7 @@ set_md5 () {
         esac
 
         echo "test" | $MD5 > /dev/null 2>&1
-        if [ ! "$?" ]
+        if [[ ! "$?" ]] 
         then
             LOG ERROR "ERROR - PPSS requires $MD5. It may not be within the path or installed."
             return 1
@@ -882,7 +883,7 @@ set_md5 () {
 
 set_stat () {
 
-    if [ "$DAEMON" = "1" ] && [ "$INOTIFY" = "0" ]
+    if [[ "$DAEMON" == "1" && "$INOTIFY" == "0" ]] 
     then
         case $ARCH in
             "Darwin")  STAT="stat -f%m" ;;
@@ -892,7 +893,7 @@ set_stat () {
         esac
 
         $STAT . >> /dev/null 2>&1
-        if [ ! "$?" ]
+        if [[ ! "$?" ]] 
         then
             LOG ERROR "ERROR - PPSS daemon mode requires stat. It may not be within the path or installed."
             return 1
@@ -918,18 +919,18 @@ log () {
     # Performance hack. Don't go through all the code if not required.
     #
 
-    if [ "$TYPE" = "DEBUG" ] && [ "$PPSS_DEBUG" == "0" ]
+    if [[ "$TYPE" == "DEBUG" && "$PPSS_DEBUG" == "0" ]] 
     then
         return 
     fi
 
-    TYPE_EXP=`expand_str "$TYPE"`
+    TYPE_EXP=$(expand_str "$TYPE")
 
-    DATE=`date +%b\ %d\ %H:%M:%S`
+    DATE=$(date +%b\ %d\ %H:%M:%S)
     PREFIX="$DATE: ${TYPE_EXP:0:$TYPE_LENGTH}"
     PREFIX_SMALL="$DATE: "
 
-    if [ ! "$TYPE" = "ERROR" ]
+    if [[ "$TYPE" != "ERROR" ]] 
     then
         ECHO_MSG="$PREFIX_SMALL $MESG"
     else
@@ -937,24 +938,24 @@ log () {
     fi
     LOG_MSG="$PREFIX $MESG"
 
-    if [ ! -z "$PPSS_DEBUG" ] && [ ! "$PPSS_DEBUG" == "0" ]
+    if [[ ! -z "$PPSS_DEBUG" && "$PPSS_DEBUG" != "0" ]]
     then
         echo -e "$LOG_MSG" >> "$LOGFILE"
 
-    elif [ "$TYPE" == "INFO" ] || [ "$TYPE" == "ERROR" ] || [ "$TYPE" == "WARN" ] || [ "$TYPE" == "DSPLY" ]
+    elif [[ "$TYPE" == "INFO" || "$TYPE" == "ERROR" || "$TYPE" == "WARN" || "$TYPE" == "DSPLY" ]]
     then
         echo -e "$LOG_MSG" >> "$LOGFILE"
     fi
 
-    if [ "$TYPE" == "DSPLY" ] || [ "$TYPE" == "ERROR" ] || [ "$TYPE" == "WARN" ] && [ "$QUIET" == "0" ]
+    if [[ "$TYPE" == "DSPLY" || "$TYPE" == "ERROR" || "$TYPE" == "WARN" && "$QUIET" == "0" ]]
     then
         echo -e "$ECHO_MSG"
 
-    elif [ "$TYPE" == "ERROR" ] && [ "$QUIET" == "1" ]
+    elif [[ "$TYPE" == "ERROR" && "$QUIET" == "1" ]]
     then
         echo -e "$ECHO_MSG"
     fi
-    if [ "$TYPE" == "PRCNT" ]
+    if [[ "$TYPE" == "PRCNT" ]] 
     then
        echo -en "\r$ECHO_MSG"
        #echo "$ECHO_MSG" # for debugging.
@@ -966,7 +967,7 @@ init_vars () {
     #
     # Get start time to measure how long PPSS has been running.
     #
-    START_PPSS=`get_time_in_seconds`
+    START_PPSS=$(get_time_in_seconds)
 
     #
     # Check if MD5(SUM) is present on the system.
@@ -980,7 +981,7 @@ init_vars () {
     #
     # Is PPSS run as a daemon? Then use input locking, which is not required otherwise.
     #
-    if [ "$DAEMON" == "1" ]
+    if [[ "$DAEMON" == "1" ]] 
     then
         INPUT_LOCK="$SRC_DIR/INPUT_LOCK"
     fi
@@ -989,10 +990,10 @@ init_vars () {
     # For some strange reason, this value differ on different operating systems due to
     # different behaviour betwen the ps utilily acros operating systems.
     #
-    if [ "$ARCH" == "Darwin" ]
+    if [[ "$ARCH" == "Darwin" ]] 
     then
         MIN_JOBS=4
-    elif [ "$ARCH" == "Linux" ]
+    elif [[ "$ARCH" == "Linux" ]] 
     then
         MIN_JOBS=3
     fi
@@ -1000,12 +1001,12 @@ init_vars () {
     FIFO="$PPSS_DIR"/ppss-fifo-$RANDOM-$RANDOM
     FIFO_LISTENER="$PPSS_DIR"/ppss-fifo-listener-$RANDOM-$RANDOM
 
-    if [ ! -e "$FIFO" ]
+    if [[ ! -e "$FIFO" ]] 
     then    
         mkfifo -m 600 $FIFO
     fi
 
-    if [ ! -e "$FIFO_LISTENER" ]
+    if [[ ! -e "$FIFO_LISTENER" ]] 
     then    
         mkfifo -m 600 $FIFO_LISTENER
     fi
@@ -1015,86 +1016,86 @@ init_vars () {
 
     set_status "RUNNING" 
 
-    if [ -e "$CPUINFO" ]
+    if [[ -e "$CPUINFO" ]] 
     then
-        CPU=`cat $CPUINFO | grep 'model name' | cut -d ":" -f 2 | sed -e s/^\ //g | sort | uniq`
+        CPU=$(cat $CPUINFO | grep 'model name' | cut -d ":" -f 2 | sed -e s/^\ //g | sort | uniq)
         log DSPLY "CPU: $CPU"
-    elif [ "$ARCH" == "Darwin" ]
+    elif [[ "$ARCH" == "Darwin" ]] 
     then
-        MODEL=`system_profiler SPHardwareDataType | grep "Processor Name" | cut -d ":" -f 2`
-        SPEED=`system_profiler SPHardwareDataType | grep "Processor Speed" | cut -d ":" -f 2`
+        MODEL=$(system_profiler SPHardwareDataType | grep "Processor Name" | cut -d ":" -f 2)
+        SPEED=$(system_profiler SPHardwareDataType | grep "Processor Speed" | cut -d ":" -f 2)
         log DSPLY "CPU: $MODEL $SPEED"
-    elif [ "$ARCH" == "SunOS" ]
+    elif [[ "$ARCH" == "SunOS" ]] 
     then
-        CPU=`/usr/sbin/psrinfo -v | grep MHz | cut -d " " -f 4,8 | awk '{ printf ("Processor architecture: %s @ %s MHz.\n", $1,$2) }' | head -n 1`
+        CPU=$(/usr/sbin/psrinfo -v | grep MHz | cut -d " " -f 4,8 | awk '{ printf ("Processor architecture: %s @ %s MHz.\n", $1,$2) }' | head -n 1)
         log DSPLY "$CPU"
     else
         log DSPLY "CPU: Cannot determine. Provide a patch for your arch!"
         log DSPLY "Arch is $ARCH"
     fi 
 
-    if [ -z "$MAX_NO_OF_RUNNING_JOBS" ]
+    if [[ -z "$MAX_NO_OF_RUNNING_JOBS" ]] 
     then 
         get_no_of_cpus $HYPERTHREADING
     fi
 
-    if [ ! -z "$SSH_SERVER" ]
+    if [[ ! -z "$SSH_SERVER" ]] 
     then
         does_file_exist "$PPSS_HOME_DIR/$JOB_LOG_DIR"
-        if [ ! "$?" = "0" ]  
+        if [[ ! "$?" == "0" ]]  
         then
             log DEBUG "Remote Job log directory $PPSS_HOME_DIR/$JOB_lOG_DIR does not exist. Creating."
             exec_cmd "mkdir $PPSS_HOME_DIR/$JOB_LOG_DIR"
         fi
     fi
 
-    if [ ! -e "$JOB_LOG_DIR" ]
+    if [[ ! -e "$JOB_LOG_DIR" ]] 
     then
         mkdir -p "$JOB_LOG_DIR"
     fi
 
-    if [ ! -z "$SSH_SERVER" ]
+    if [[ ! -z "$SSH_SERVER" ]] 
     then
         ITEM_LOCK_DIR="$PPSS_HOME_DIR/$ITEM_LOCK_DIR"
     fi
     
     does_file_exist "$ITEM_LOCK_DIR"
-    if [ ! "$?" = "0" ] 
+    if [[ ! "$?" == "0" ]] 
     then
-        if [ ! -z "$SSH_SERVER" ]
+        if [[ ! -z "$SSH_SERVER" ]] 
         then
             log DEBUG "Creating remote item lock dir."
         else
             log DEBUG "Creating local item lock dir."
         fi
         exec_cmd "mkdir $ITEM_LOCK_DIR"
-        if [ ! "$?" ]
+        if [[ ! "$?" ]] 
         then
             log DEBUG "Failed to create item lock dir."
         fi
     fi
 
-    if [ ! -z "$SSH_SERVER" ]
+    if [[ ! -z "$SSH_SERVER" ]] 
     then
         does_file_exist "$REMOTE_OUTPUT_DIR"
-        if [ ! "$?" = "0" ] 
+        if [[ ! "$?" == "0" ]] 
         then
             log DEBUG "Remote output dir $REMOTE_OUTPUT_DIR does not exist."
             exec_cmd "mkdir $REMOTE_OUTPUT_DIR"
         fi
     fi
 
-    if [ ! -e "$PPSS_LOCAL_TMPDIR" ]
+    if [[ ! -e "$PPSS_LOCAL_TMPDIR" ]] 
     then
         mkdir "$PPSS_LOCAL_TMPDIR"
     fi
 
-    if [ ! -e "$PPSS_LOCAL_OUTPUT" ] 
+    if [[ ! -e "$PPSS_LOCAL_OUTPUT" ]] 
     then
         mkdir "$PPSS_LOCAL_OUTPUT"
     fi
 
-    if [ ! -e "$PPSS_NODE_STATUS" ]
+    if [[ ! -e "$PPSS_NODE_STATUS" ]] 
     then
         mkdir -p "$PPSS_NODE_STATUS"
     fi
@@ -1103,10 +1104,10 @@ init_vars () {
 
 upload_status () {
 
-    if [ -e "$NODE_STATUS_FILE" ] 
+    if [[ -e "$NODE_STATUS_FILE" ]] 
     then
         scp -q -o GlobalKnownHostsFile=./known_hosts -i ppss-key.dsa $NODE_STATUS_FILE $USER@$SSH_SERVER:$PPSS_HOME_DIR/$PPSS_NODE_STATUS/ 
-        if [ "$?" == "0" ]
+        if [[ "$?" == "0" ]] 
         then
             log DEBUG "Uploaded status to server ok."
         else
@@ -1119,19 +1120,19 @@ upload_status () {
 
 set_status () {
 
-    if [ ! -z "$SSH_SERVER" ]
+    if [[ ! -z "$SSH_SERVER" ]] 
     then
         STATUS="$1"
-        if [ -e "$LIST_OF_PROCESSED_ITEMS" ]
+        if [[ -e "$LIST_OF_PROCESSED_ITEMS" ]] 
         then
             NO_PROCESSED=$(wc -l "$LIST_OF_PROCESSED_ITEMS" | awk '{ print $1 }' )
         else
             NO_PROCESSED="0"
         fi
-        NODE=`cat $PPSS_DIR/$NODE_ID`
+        NODE=$(cat $PPSS_DIR/$NODE_ID)
         FAILED="$2"
 
-        if [ -z "$FAILED" ]
+        if [[ -z "$FAILED" ]] 
         then
             FAILED=0
         fi
@@ -1147,7 +1148,7 @@ check_status () {
     FUNCTION="$2"
     MESSAGE="$3"
 
-    if [ ! "$ERROR" == "0" ]
+    if [[ ! "$ERROR" == "0" ]] 
     then
         log DSPLY "$FUNCTION - $MESSAGE"
         set_status ERROR 
@@ -1169,9 +1170,9 @@ erase_ppss () {
     echo "Are you realy sure you want to erase PPSS from all nodes!? (YES/NO)"
     read YN
 
-    if [ "$YN" == "yes" ] || [ "$YN" == "YES" ] 
+    if [[ "$YN" == "yes" ]] || [[ "$YN" == "YES" ]] 
     then
-        for NODE in `cat $NODES_FILE`
+        for NODE in $(cat $NODES_FILE)
         do
             log DSPLY "Erasing PPSS homedir $PPSS_HOME_DIR from node $NODE."
             ssh -q $SSH_KEY $SSH_OPTS_NODE $USER@$NODE "rm -rf $PPSS_HOME_DIR"
@@ -1185,7 +1186,7 @@ stack_push_tmp () {
 
     TMP1="$1"
 
-    if [ -z "$TMP_STACK" ]
+    if [[ -z "$TMP_STACK" ]] 
     then
         TMP_STACK="$TMP1"
     else
@@ -1197,7 +1198,7 @@ stack_push () {
 
     line="$1"
 
-    if [ -z "$STACK" ]
+    if [[ -z "$STACK" ]] 
     then
         STACK="$line"
     else
@@ -1209,7 +1210,7 @@ unprocessed_stack_push () {
 
     line="$1"
 
-    if [ -z "$PROCESSED_ITEMS" ]
+    if [[ -z "$PROCESSED_ITEMS" ]] 
     then
         UNPROCESSED_ITEMS="$line"
     else
@@ -1221,7 +1222,7 @@ processed_stack_push () {
 
     line="$1"
 
-    if [ -z "$PROCESSED_ITEMS" ]
+    if [[ -z "$PROCESSED_ITEMS" ]] 
     then
         PROCESSED_ITEMS="$line"
     else
@@ -1236,7 +1237,7 @@ stack_pop () {
     tmp=""
     for x in $STACK
     do
-        if [ "$i" = "0" ]
+        if [[ "$i" == "0" ]] 
         then
             tmp="$x"
         else
@@ -1246,7 +1247,7 @@ stack_pop () {
     done
     STACK="$TMP_STACK"
     REGISTER="$tmp"
-    if [ -z "$REGISTER" ]
+    if [[ -z "$REGISTER" ]] 
     then
         return 1
     else
@@ -1256,14 +1257,14 @@ stack_pop () {
 
 is_screen_installed () {
 
-    if [ "$DISABLE_SCREEN_TEST" == "1" ]    
+    if [[ "$DISABLE_SCREEN_TEST" == "1" ]]    
     then
         return 0
     fi
 
     NODE="$1"
     ssh -q $SSH_OPTS_NODE $SSH_KEY $USER@$NODE "screen -m -D -S test ls" > /dev/null 2>&1 
-    if [ ! "$?" == "0" ]
+    if [[ ! "$?" == "0" ]] 
     then
         log ERROR "The 'Screen' command may not be installed on node $NODE."
         log ERROR "Or some other SSH related error occurred." 
@@ -1294,15 +1295,15 @@ deploy () {
     ERROR=0
     set_error () {
 
-        if [ "$ERROR" == "1" ]
+        if [[ "$ERROR" == "1" ]] 
         then 
             ERROR=1 
-        elif [ ! "$1" == "0" ]
+        elif [[ ! "$1" == "0" ]] 
         then
             ERROR=1
         fi
     }
-    if [ ! -e "$SSH_SOCKET" ]
+    if [[ ! -e "$SSH_SOCKET" ]] 
     then
         ssh -q -N $SSH_OPTS_NODE $SSH_KEY $USER@$NODE &
         SSH_PID=$!
@@ -1310,7 +1311,7 @@ deploy () {
 
     is_screen_installed "$NODE"
 
-    KEY=`echo $SSH_KEY | cut -d " " -f 2` 
+    KEY=$(echo $SSH_KEY | cut -d " " -f 2) 
 
     ssh -q  $SSH_OPTS_SLAVE $SSH_KEY $USER@$NODE "cd ~ && mkdir -p $PPSS_HOME_DIR && mkdir -p $PPSS_HOME_DIR/$JOB_LOG_DIR && mkdir -p $PPSS_HOME_DIR/ITEM_LOCK_DIR >> /dev/null 2>&1" 
     set_error $?
@@ -1325,19 +1326,19 @@ deploy () {
     scp -q $SSH_OPTS_SLAVE $SSH_KEY known_hosts $USER@$NODE:~/$PPSS_HOME_DIR
     set_error $?
 
-    if [ ! -z "$SCRIPT" ]
+    if [[ ! -z "$SCRIPT" ]] 
     then
         scp -q $SSH_OPTS_SLAVE $SSH_KEY $SCRIPT $USER@$NODE:~/$PPSS_HOME_DIR
         set_error $?
     fi
 
-    if [ ! -z "$INPUT_FILE" ]
+    if [[ ! -z "$INPUT_FILE" ]] 
     then
         scp -q $SSH_OPTS_SLAVE $SSH_KEY $INPUT_FILE $USER@$NODE:~/$PPSS_HOME_DIR
         set_error $?
     fi
 
-    if [ "$ERROR" == "0" ]
+    if [[ "$ERROR" == "0" ]] 
     then
         log DSPLY  "PPSS installed on node $NODE."
     else
@@ -1349,7 +1350,7 @@ deploy () {
 
 deploy_ppss () {
 
-    if [ -z "$NODES_FILE" ] || [ ! -e "$NODES_FILE" ]
+    if [[ -z "$NODES_FILE" ]] || [[ ! -e "$NODES_FILE" ]] 
     then
         log ERROR "No file containing list of nodes missing / not specified."
         set_status ERROR
@@ -1359,8 +1360,8 @@ deploy_ppss () {
 
     exec_cmd "mkdir -p $PPSS_HOME_DIR/$PPSS_NODE_STATUS"
     
-    KEY=`echo $SSH_KEY | cut -d " " -f 2` 
-    if [ -z "$KEY" ] || [ ! -e "$KEY" ]
+    KEY=$(echo $SSH_KEY | cut -d " " -f 2) 
+    if [[ -z "$KEY" ]] || [[ ! -e "$KEY" ]] 
     then
         log ERROR "Private SSH key $KEY not found."
         set_status "ERROR"
@@ -1368,7 +1369,7 @@ deploy_ppss () {
         exit 1
     fi
 
-    if [ ! -e "$SCRIPT" ] && [ ! -z "$SCRIPT" ]
+    if [[ ! -e "$SCRIPT" && ! -z "$SCRIPT" ]] 
     then
         log ERROR "Script $SCRIPT not found."
         set_status "ERROR"
@@ -1377,22 +1378,22 @@ deploy_ppss () {
     fi
 
     INSTALLED_ON_SSH_SERVER=0
-    for NODE in `cat $NODES_FILE` 
+    for NODE in $(cat $NODES_FILE) 
     do
         deploy "$NODE" &
-        if [ "$ARCH" == "SunOS" ]
+        if [[ "$ARCH" == "SunOS" ]] 
         then
             sleep 1
         else
             sleep 0.1
         fi
-        if [ "$NODE" == "$SSH_SERVER" ]
+        if [[ "$NODE" == "$SSH_SERVER" ]] 
         then   
             INSTALLED_ON_SSH_SERVER=1
         fi
     done
 
-    if [ "$INSTALLED_ON_SSH_SERVER" == "0" ]
+    if [[ "$INSTALLED_ON_SSH_SERVER" == "0" ]] 
     then
         log DEBUG "SSH SERVER $SSH_SERVER is not a node."
     else
@@ -1405,7 +1406,7 @@ start_ppss_on_node () {
     NODE="$1"
     log DSPLY "Starting PPSS on node $NODE."
     ssh $SSH_KEY $USER@$NODE -o ConnectTimeout=5 -o GlobalKnownHostsFile=./known_hosts "cd $PPSS_HOME_DIR ; screen -d -m -S PPSS ~/$PPSS_HOME_DIR/$0 node --config ~/$PPSS_HOME_DIR/$CONFIG" 
-    if [ ! "$?" == "0" ]
+    if [[ ! "$?" == "0" ]] 
     then
         log ERROR  "|P|P|S|S| failed to start on node $NODE."
     fi
@@ -1413,9 +1414,9 @@ start_ppss_on_node () {
 
 init_ssh_server_socket () {
 
-        if [ ! -e "$SSH_SOCKET" ]
+        if [[ ! -e "$SSH_SOCKET" ]] 
         then
-            DIR=`dirname $SSH_SOCKET`
+            DIR=$(dirname $SSH_SOCKET)
             mkdir -p "$DIR"
         fi
 }
@@ -1423,7 +1424,7 @@ init_ssh_server_socket () {
 test_server () {
 
     # Testing if the remote server works as expected.
-    if [ ! -z "$SSH_SERVER" ] 
+    if [[ ! -z "$SSH_SERVER" ]] 
     then 
         init_ssh_server_socket
         
@@ -1436,7 +1437,7 @@ test_server () {
         log INFO "Connected to server: $SSH_SERVER"
 
         does_file_exist "$PPSS_HOME_DIR/$PPSS_DIR"
-        if [ ! "$?" = "0" ] && [ ! -z "$SSH_SERVER" ]
+        if [[ ! "$?" == "0" && ! -z "$SSH_SERVER" ]] 
         then
             log DEBUG "Remote PPSS home directory $PPSS_HOME_DIR/$PPSS_DIR does not exist. Creating."
             exec_cmd "mkdir -p $PPSS_HOME_DIR/$PPSS_DIR"
@@ -1452,7 +1453,7 @@ get_no_of_cpus () {
     HPT=$1
     NUMBER=""
 
-    if [ -z "$HPT" ]
+    if [[ -z "$HPT" ]] 
     then
         HPT=yes
     fi
@@ -1464,62 +1465,62 @@ get_no_of_cpus () {
 
     }
 
-    if [ "$HPT" == "yes" ]
+    if [[ "$HPT" == "yes" ]] 
     then
-        if [ "$ARCH" == "Linux" ]
+        if [[ "$ARCH" == "Linux" ]] 
         then
-            NUMBER=`grep -c ^processor $CPUINFO`
+            NUMBER=$(grep -c ^processor $CPUINFO)
             got_cpu_info "$?"
 
-        elif [ "$ARCH" == "Darwin" ]
+        elif [[ "$ARCH" == "Darwin" ]] 
         then
-            NUMBER=`sysctl -a hw | grep -w logicalcpu | awk '{ print $2 }'`
+            NUMBER=$(sysctl -a hw | grep -w logicalcpu | awk '{ print $2 }')
             got_cpu_info "$?"
 
-        elif [ "$ARCH" == "FreeBSD" ]
+        elif [[ "$ARCH" == "FreeBSD" ]] 
         then
-            NUMBER=`sysctl hw.ncpu | awk '{ print $2 }'`
+            NUMBER=$(sysctl hw.ncpu | awk '{ print $2 }')
             got_cpu_info "$?"
 
-        elif [ "$ARCH" == "SunOS" ]
+        elif [[ "$ARCH" == "SunOS" ]] 
         then
-            NUMBER=`psrinfo | grep -c on-line`
+            NUMBER=$(psrinfo | grep -c on-line)
             got_cpu_info "$?"
         else
-            if [ -e "$CPUINFO" ]
+            if [[ -e "$CPUINFO" ]] 
             then
-                NUMBER=`grep -c ^processor $CPUINFO`
+                NUMBER=$(grep -c ^processor $CPUINFO)
                 got_cpu_info "$?"
             fi 
         fi
 
-        if [ ! -z "$NUMBER" ]
+        if [[ ! -z "$NUMBER" ]] 
         then
             log DSPLY "Found $NUMBER logic processors."
         fi
 
-    elif [ "$HPT" == "no" ]
+    elif [[ "$HPT" == "no" ]] 
     then
         log DSPLY "Hyperthreading is disabled."
 
-        if [ "$ARCH" == "Linux" ]
+        if [[ "$ARCH" == "Linux" ]] 
         then
-            PHYSICAL=`grep 'physical id' $CPUINFO`
-            if [ "$?" ]
+            PHYSICAL=$(grep 'physical id' $CPUINFO)
+            if [[ "$?" ]] 
             then
-                PHYSICAL=`grep 'physical id' $CPUINFO | sort | uniq | wc -l`
-                if [ "$PHYSICAL" == "1" ]
+                PHYSICAL=$(grep 'physical id' $CPUINFO | sort | uniq | wc -l)
+                if [[ "$PHYSICAL" == "1" ]] 
                 then
                     log DSPLY "Found $PHYSICAL physical CPU."
                 else
                     log DSPLY "Found $PHYSICAL physical CPUs."
                 fi
 
-                TMP=`grep 'core id' $CPUINFO` 
-                if [ "$?" ]
+                TMP=$(grep 'core id' $CPUINFO) 
+                if [[ "$?" ]] 
                 then
                     log DEBUG "Starting job only for each physical core on all physical CPU(s)."
-                    NUMBER=`grep 'core id' $CPUINFO | sort | uniq | wc -l` 
+                    NUMBER=$(grep 'core id' $CPUINFO | sort | uniq | wc -l) 
                     log DSPLY "Found $NUMBER physical cores."
                 else
                     log DSPLY "Single core processor(s) detected."
@@ -1528,25 +1529,25 @@ get_no_of_cpus () {
                 fi
             else
                 log INFO "No 'physical id' section found in $CPUINFO, typical for older cpus."            
-                NUMBER=`grep -c ^processor $CPUINFO`
+                NUMBER=$(grep -c ^processor $CPUINFO)
                 got_cpu_info "$?"
             fi
-        elif [ "$ARCH" == "Darwin" ]
+        elif [[ "$ARCH" == "Darwin" ]] 
         then
-            NUMBER=`sysctl -a hw | grep -w physicalcpu | awk '{ print $2 }'`
+            NUMBER=$(sysctl -a hw | grep -w physicalcpu | awk '{ print $2 }')
             got_cpu_info "$?"
-        elif [ "$ARCH" == "FreeBSD" ]
+        elif [[ "$ARCH" == "FreeBSD" ]] 
         then
-            NUMBER=`sysctl hw.ncpu | awk '{ print $2 }'`
+            NUMBER=$(sysctl hw.ncpu | awk '{ print $2 }')
             got_cpu_info "$?"
         else
-            NUMBER=`cat $CPUINFO | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g`
+            NUMBER=$(cat $CPUINFO | grep "cpu cores" | cut -d ":" -f 2 | uniq | sed -e s/\ //g)
             got_cpu_info "$?"
         fi
 
     fi
 
-    if [ ! -z "$NUMBER" ] 
+    if [[ ! -z "$NUMBER" ]] 
     then
         MAX_NO_OF_RUNNING_JOBS=$NUMBER
     else
@@ -1561,7 +1562,7 @@ random_delay () {
 
     ARGS="$1"
 
-    if [ -z "$ARGS" ]
+    if [[ -z "$ARGS" ]] 
     then
         log ERROR "$FUNCNAME Function random delay, no argument specified."
         set_status "ERROR"
@@ -1592,7 +1593,7 @@ escape_item () {
 
 download_item () {
 
-    if [ ! "$DOWNLOAD_TO_NODE" == "1" ] || [ "$VIRTUAL" == "1" ] 
+    if [[ ! "$DOWNLOAD_TO_NODE" == "1" ]] || [[ "$VIRTUAL" == "1" ]] 
     then
         return 1
     fi
@@ -1602,13 +1603,13 @@ download_item () {
     ERR_STATE="0"
     HASH=""
 
-    if [ "$RECURSION" = "1" ]
+    if [[ "$RECURSION" == "1" ]] 
     then
         escape_item "$ITEM"
         does_file_exist "$ITEM_ESCAPED"
         ERR_STATE="$?"
         DOWNLOAD_ITEM="$ITEM"
-        HASH=`echo "$DOWNLOAD_ITEM" | $MD5 | awk '{ print $1 }'`
+        HASH=$(echo "$DOWNLOAD_ITEM" | $MD5 | awk '{ print $1 }')
         LOCAL_DIR="$HASH"
     else
         escape_item "$ITEM"
@@ -1617,7 +1618,7 @@ download_item () {
         DOWNLOAD_ITEM="$SRC_DIR/$ITEM"
     fi
 
-    if [ "$ERR_STATE" == "0" ]
+    if [[ "$ERR_STATE" == "0" ]] 
     then
         log DEBUG "$FUNCNAME Remote item $ITEM exists"
         VIRTUAL=0
@@ -1627,12 +1628,12 @@ download_item () {
         VIRTUAL=1
     fi
 
-    if [ "$DOWNLOAD_TO_NODE" == "1" ] && [ "$VIRTUAL" == "0" ] 
+    if [[ "$DOWNLOAD_TO_NODE" == "1" && "$VIRTUAL" == "0" ]] 
     then
         log DEBUG "Transfering item $ITEM from source to local disk."
-        if [ "$SECURE_COPY" == "1" ] && [ ! -z "$SSH_SERVER" ] 
+        if [[ "$SECURE_COPY" == "1" && ! -z "$SSH_SERVER" ]] 
         then
-            if [ "$RECURSION" == "1" ]
+            if [[ "$RECURSION" == "1" ]] 
             then
                 escape_item "$DOWNLOAD_ITEM" 
                 mkdir -p "$PPSS_LOCAL_TMPDIR/$LOCAL_DIR"
@@ -1655,7 +1656,7 @@ download_item () {
 
 upload_item () {
 
-    if [ ! "$UPLOAD_TO_SERVER" == "1" ]
+    if [[ ! "$UPLOAD_TO_SERVER" == "1" ]] 
     then
         log DEBUG "Upload to server is disabled."
         return 1
@@ -1666,7 +1667,7 @@ upload_item () {
     REMOTE_DEST_DIR="$2" # to recreate the directory structure
     DESTINATION=""
 
-    if [ "$RECURSION" = "1" ]
+    if [[ "$RECURSION" == "1" ]] 
     then 
         log DEBUG "Recursive copy is enabled."
         TMP_DESTINATION="$REMOTE_OUTPUT_DIR/$REMOTE_DEST_DIR" 
@@ -1679,16 +1680,16 @@ upload_item () {
     escape_item "$TMP_DESTINATION"
     DESTINATION="$ITEM_ESCAPED"
 
-    log DEBUG "Destination = $DESTINATION"
+    log DEBUG "Destination == $DESTINATION"
 
     log DEBUG "Uploading item $LOCAL_SRC_DIR."
-    if [ "$SECURE_COPY" == "1" ]
+    if [[ "$SECURE_COPY" == "1" ]] 
     then
         log DEBUG "Secure copy is enabled."
         log DEBUG "Copy contents of $LOCAL_SRC_DIR to server at $DESTINATION"
         scp $SSH_OPTS $SSH_KEY $LOCAL_SRC_DIR/* $USER@$SSH_SERVER:"$DESTINATION" 
         ERROR="$?"
-        if [ ! "$ERROR" == "0" ]
+        if [[ ! "$ERROR" == "0" ]] 
         then
             log ERROR "Uploading of $LOCAL_SRC_DIR via SCP to $DIR_ESCAPED failed."
         else
@@ -1698,7 +1699,7 @@ upload_item () {
     else    
         log DEBUG "Secure copy is disabled - using regular cp."
         cp "$LOCAL_SRC_DIR"/* "$TMP_DESTINATION"
-        if [ ! "$?" == "0" ]
+        if [[ ! "$?" == "0" ]] 
         then
             log DEBUG "ERROR - uploading of $LOCAL_SRC_DIR via CP to $DESTINATION failed."
         fi
@@ -1707,7 +1708,7 @@ upload_item () {
 
 lock_item () {
 
-    if [ "$INOTIFY" = "1" ] && [ "$DAEMON" = "1" ]
+    if [[ "$INOTIFY" == "1" && "$DAEMON" == "1" ]] 
     then
         #
         # In daemon mode, there is no risk that processes try to process
@@ -1717,11 +1718,11 @@ lock_item () {
     else
         ITEM="$1"
 
-        if [ "$USE_MD5" == "1" ]
+        if [[ "$USE_MD5" == "1" ]] 
         then
-            LOCK_FILE_NAME=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
+            LOCK_FILE_NAME=$(echo "$ITEM" | $MD5 | awk '{ print $1 }')
         else
-            LOCK_FILE_NAME=`echo "$ITEM" | sed s/[^[:alnum:]]/_/g`
+            LOCK_FILE_NAME=$(echo "$ITEM" | sed s/[^[:alnum:]]/_/g)
         fi
         ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME"
         log DEBUG "Locking item $ITEM_LOCK_FILE"
@@ -1736,7 +1737,7 @@ get_input_lock () {
     while true
     do 
         exec_cmd "mkdir $INPUT_LOCK >> /dev/null 2>&1 " 
-        if [ "$?" ]
+        if [[ "$?" ]] 
         then
             log DEBUG "Input lock is obtained..."
             break
@@ -1750,7 +1751,7 @@ get_input_lock () {
 release_input_lock () {
     
     exec_cmd "rm -rf $INPUT_LOCK"
-    if [ "$?" ]
+    if [[ "$?" ]] 
     then
         log DEBUG "Input lock was released..."
         return 0
@@ -1779,39 +1780,39 @@ remove_processed_items_from_input_file () {
     # Processed items have a lock dir in the PPPSS_ITEM_LOCK_DIR.
     #
 
-    if [ -e "$LIST_OF_PROCESSED_ITEMS" ]
+    if [[ -e "$LIST_OF_PROCESSED_ITEMS" ]] 
     then
-        PROCESSED_ITEMS=`cat $LIST_OF_PROCESSED_ITEMS`
+        PROCESSED_ITEMS=$(cat $LIST_OF_PROCESSED_ITEMS)
     fi
 
     log INFO "Running $FUNCNAME"
 
-    if [ -z "$PROCESSED_ITEMS" ]
+    if [[ -z "$PROCESSED_ITEMS" ]] 
     then
         log DEBUG "Variable processed_items is empty."
         return 1
     fi
 
-    if [ "$MODE" = "status" ]
+    if [[ "$MODE" == "status" ]] 
     then 
         log DEBUG "Mode is status."
         return 1
     fi
 
-    if [ ! -e "$LISTOFITEMS" ]
+    if [[ ! -e "$LISTOFITEMS" ]] 
     then
         echo "$LISTOFITEMS does not exist!"
         return 1
     else
-        SIZE=`wc -l "$LISTOFITEMS"`
-        if [ "$SIZE" = "0" ]
+        SIZE=$(wc -l "$LISTOFITEMS")
+        if [[ "$SIZE" == "0" ]] 
         then
             echo "$LISTOFITEMS exists but is empty."
             return 1
         fi
     fi
 
-    INPUTFILES=`list_all_input_items`
+    INPUTFILES=$(list_all_input_items)
 
     OUT_FILE=$PPSS_DIR/out-file-$RANDOM$RANDOM$RANDOM$RAMDOM
     LIST_SORTED=$PPSS_DIR/list-sorted-$RANDOM$RANDOM$RANDOM$RANDOM
@@ -1824,48 +1825,48 @@ remove_processed_items_from_input_file () {
 
 get_all_items () {
 
-    if [ "$DAEMON" == "1" ] && [ "$INOTIFY" = "0" ]  && [ "$ENABLE_INPUT_LOCK" = "1" ]
+    if [[ "$DAEMON" == "1" && "$INOTIFY" == "0" ]]  && [[ "$ENABLE_INPUT_LOCK" == "1" ]] 
     then
         get_input_lock
     fi
 
     GLOBAL_COUNTER=1
     
-    if [ -e "$LISTOFITEMS" ] 
+    if [[ -e "$LISTOFITEMS" ]] 
     then
         rm "$LISTOFITEMS"
     fi
 
     count=0
 
-    if [ -z "$INPUT_FILE" ]
+    if [[ -z "$INPUT_FILE" ]] 
     then
-        if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a node?"
+        if [[ ! -z "$SSH_SERVER" ]] # Are we running stand-alone or as a node?"
         then
-            if [ "$RECURSION" == "1" ]
+            if [[ "$RECURSION" == "1" ]] 
             then
-                `exec_cmd "find $SRC_DIR/ ! -type d" > "$LISTOFITEMS"`
+                $(exec_cmd "find $SRC_DIR/ ! -type d" > "$LISTOFITEMS")
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             else
                 log DEBUG "Recursion is disabled."
-                `exec_cmd "find $SRC_DIR/ -depth 1 ! -type d" > "$LISTOFITEMS"`
+                $(exec_cmd "find $SRC_DIR/ -depth 1 ! -type d" > "$LISTOFITEMS")
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             fi
 
         else 
-            if [ -e "$SRC_DIR" ]
+            if [[ -e "$SRC_DIR" ]] 
             then
-                if [ "$RECURSION" == "1" ]
+                if [[ "$RECURSION" == "1" ]] 
                 then
                     log DEBUG "Recursion is enabled."
-                    `find "$SRC_DIR"/ ! -type d >> "$LISTOFITEMS"` 
+                    $(find "$SRC_DIR"/ ! -type d >> "$LISTOFITEMS") 
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 else
                     log DEBUG "Recursion is disabled."
-                    `find "$SRC_DIR"/ -depth 1 ! -type d >> "$LISTOFITEMS"`
+                    $(find "$SRC_DIR"/ -depth 1 ! -type d >> "$LISTOFITEMS")
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 fi
-                if [ ! -e "$LISTOFITEMS" ]
+                if [[ ! -e "$LISTOFITEMS" ]] 
                 then
                     log ERROR "Local input file is not created, something is wrong. Bug?"
                     set_status "ERROR"
@@ -1878,11 +1879,11 @@ get_all_items () {
             fi
         fi
     else  # Using an input file as the source of our items or STDIN.
-        if [ ! -z "$SSH_SERVER" ] # Are we running stand-alone or as a slave?"
+        if [[ ! -z "$SSH_SERVER" ]] # Are we running stand-alone or as a slave?"
         then
             log DEBUG "Running as node, input file has been pushed (hopefully)."
         fi
-        if [ ! -e "$INPUT_FILE" ] && [ ! "$INPUT_FILE" == "-" ]
+        if [[ ! -e "$INPUT_FILE" && ! "$INPUT_FILE" == "-" ]] 
         then
             log ERROR "Input file $INPUT_FILE does not exist."
             set_status "ERROR"
@@ -1890,7 +1891,7 @@ get_all_items () {
             exit 1
         fi
     
-        if [ ! "$INPUT_FILE" == "-" ]
+        if [[ ! "$INPUT_FILE" == "-" ]] 
         then
             cp "$INPUT_FILE" "$LISTOFITEMS"
             check_status "$?" "$FUNCNAME" "Copy of input file failed!"
@@ -1902,7 +1903,7 @@ get_all_items () {
             done
         fi
 
-        if [ ! -e "$LISTOFITEMS" ]
+        if [[ ! -e "$LISTOFITEMS" ]] 
         then
             log ERROR "Input is empty."
             infanticide
@@ -1911,13 +1912,13 @@ get_all_items () {
         fi
     fi
 
-    if [ "$RANDOMIZE" == "1" ] && [ "$MODE" != "status" ]
+    if [[ "$RANDOMIZE" == "1" && "$MODE" != "status" ]] 
     then
         log DEBUG "Randomizing input file."
         IFS_BACK="$IFS"
         IFS=$'\n'
         TMP_FILE="$PPSS_DIR/TMP-$RANDOM$RANDOM.txt"
-        for i in `cat $LISTOFITEMS`; do echo "$RANDOM $i"; done | sort | sed -E 's/^[0-9]+ //' > "$TMP_FILE"
+        for i in $(cat $LISTOFITEMS); do echo "$RANDOM $i"; done | sort | sed -E 's/^[0-9]+ //' > "$TMP_FILE"
         mv "$TMP_FILE" "$LISTOFITEMS"
         IFS="$IFS_BACK"
     else
@@ -1927,14 +1928,14 @@ get_all_items () {
 
     remove_processed_items_from_input_file
 
-    if [ "$DAEMON" == "1" ]
+    if [[ "$DAEMON" == "1" ]] 
     then
         release_input_lock
     fi
 
     SIZE_OF_INPUT=$(wc -l "$LISTOFITEMS" | awk '{ print $1 }')
 
-    if [ "$SIZE_OF_INPUT" -le "0" ] && [ "$DAEMON" = "0" ]
+    if [[ "$SIZE_OF_INPUT" -le "0" && "$DAEMON" == "0" ]] 
     then
         log ERROR "Source file/dir seems to be empty."
         set_status "STOPPED"
@@ -1947,9 +1948,9 @@ get_all_items () {
 are_all_items_locked () {
 
     SIZE="$1"
-    NUMBER=`exec_cmd "ls -1 $ITEM_LOCK_DIR | wc -l"`
+    NUMBER=$(exec_cmd "ls -1 $ITEM_LOCK_DIR | wc -l")
     log DEBUG "$NUMBER of $SIZE items are locked."
-    if [ "$NUMBER" -ge "$SIZE" ]
+    if [[ "$NUMBER" -ge "$SIZE" ]] 
     then
         return 0
     else
@@ -1961,7 +1962,7 @@ get_item () {
 
     check_for_interrupt 
 
-    if [ "$STOP" == "1" ]
+    if [[ "$STOP" == "1" ]] 
     then
         log DEBUG "Found stop signal."
         return 1
@@ -1970,7 +1971,7 @@ get_item () {
     #
     # Return error if list size is empty.
     #
-    if [ -z "$SIZE_OF_INPUT" ] 
+    if [[ -z "$SIZE_OF_INPUT" ]] 
     then
         log DEBUG "Got no size of input..."
         return 1
@@ -1979,7 +1980,7 @@ get_item () {
     #
     # Return error if the list is empty.
     #
-    if [ "$SIZE_OF_INPUT" -le "0" ] 
+    if [[ "$SIZE_OF_INPUT" -le "0" ]] 
     then
         return 1
     fi
@@ -1987,7 +1988,7 @@ get_item () {
     #
     # Check if all items have been processed.
     #
-    if [ "$GLOBAL_COUNTER" -gt "$SIZE_OF_INPUT" ]
+    if [[ "$GLOBAL_COUNTER" -gt "$SIZE_OF_INPUT" ]] 
     then
         log DEBUG "Counter $GLOBAL_COUNTER is greater than sizeof input $SIZE_OF_INPUT."
         return 1
@@ -2007,7 +2008,7 @@ get_item () {
 
     ITEM="$(sed -n $GLOBAL_COUNTER\p $LISTOFITEMS)"
 
-    if [ -z "$ITEM" ]
+    if [[ -z "$ITEM" ]] 
     then
         log DEBUG "Item was emtpy..."
         ((GLOBAL_COUNTER++))
@@ -2015,11 +2016,11 @@ get_item () {
     else
         ((GLOBAL_COUNTER++))
 
-        if [ ! -z "$SSH_SERVER" ]  || [ "$LOCAL_LOCKING" = "1" ]
+        if [[ ! -z "$SSH_SERVER" ]]  || [[ "$LOCAL_LOCKING" == "1" ]] 
         then
             lock_item "$ITEM"
             LOCK="$?"
-            if [ ! "$LOCK" = "0" ]
+            if [[ ! "$LOCK" == "0" ]] 
             then
                 log DEBUG "Item $ITEM is locked."
                 get_item
@@ -2047,7 +2048,7 @@ start_new_worker () {
 
 stop-ppss () {
 
-    STOP_PPSS=`get_time_in_seconds`
+    STOP_PPSS=$(get_time_in_seconds)
     elapsed "$START_PPSS" "$STOP_PPSS"
     log DSPLY "$PROCESSING_TIME"
 }
@@ -2073,16 +2074,25 @@ mail_on_error () {
     ITEM="$1"
     LOGFILE="$2"
 
-    if [ "$MAIL_ON_ERROR" = "1" ]
+    if [[ "$MAIL_ON_ERROR" == "1" ]] 
     then
         cat "$LOGFILE" | mail -s "$HOSTNAME - PPSS: procesing failed for item." "$EMAIL" 
-        if [ "$?" = "0" ]
+        if [[ "$?" == "0" ]] 
         then
             log DEBUG "Error mail sent."
         else
             log ERROR "Sending of error email failed."
         fi
     fi
+}
+
+
+add_item_to_failed_list () {
+
+    ITEM="$1"
+    get_input_lock
+    echo "$ITEM" >> "$FAILED_ITEMS" 
+    release_input_lock
 }
 
 commando () {
@@ -2112,7 +2122,7 @@ commando () {
 
     #log DEBUG "$FUNCNAME is processing item $ITEM"
 
-    if [ "$RECURSION" == "1" ]
+    if [[ "$RECURSION" == "1" ]] 
     then
         escape_item "$ITEM"
         does_file_exist "$ITEM_ESCAPED" # The item contains the full path.
@@ -2132,19 +2142,19 @@ commando () {
     # Further more, if the item is not a real world object but a string of sort
     # the item is considered virtual. No recursion. 
     #
-    if [ "$ERR_STATE" == "0" ]
+    if [[ "$ERR_STATE" == "0" ]] 
     then
         VIRTUAL="0"
-        if [ "$RECURSION" == "1" ]
+        if [[ "$RECURSION" == "1" ]] 
         then
-            ITEM_DIR_NAME=`dirname "$ITEM" | sed s:$SRC_DIR::g`
-            ITEM_BASE_NAME=`basename "$ITEM"`
-            HASH=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
-            if [ "$UPLOAD_TO_SERVER" == "1" ]
+            ITEM_DIR_NAME=$(dirname "$ITEM" | sed s:$SRC_DIR::g)
+            ITEM_BASE_NAME=$(basename "$ITEM")
+            HASH=$(echo "$ITEM" | $MD5 | awk '{ print $1 }')
+            if [[ "$UPLOAD_TO_SERVER" == "1" ]] 
             then
                 OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$HASH"
             else
-                if [ -z "$REMOTE_OUTPUT_DIR" ]
+                if [[ -z "$REMOTE_OUTPUT_DIR" ]] 
                 then
                     OUTPUT_DIR="$PPSS_LOCAL_OUTPUT"
                 else
@@ -2155,7 +2165,7 @@ commando () {
             ITEM_DIR_NAME="$SRC_DIR"
             ITEM_BASE_NAME="$ITEM"
             escape_item "$ITEM_BASE_NAME"
-            if [ "$UPLOAD_TO_SERVER" == "1" ]
+            if [[ "$UPLOAD_TO_SERVER" == "1" ]] 
             then
                 OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$ITEM_ESCAPED"
             else
@@ -2167,11 +2177,11 @@ commando () {
         ITEM_DIR_NAME=""
         ITEM_BASE_NAME="$ITEM"
         escape_item "$ITEM_BASE_NAME"
-        if [ "$UPLOAD_TO_SERVER" == "1" ]
+        if [[ "$UPLOAD_TO_SERVER" == "1" ]] 
         then
             OUTPUT_DIR=$PPSS_LOCAL_OUTPUT/"$ITEM_ESCAPED"
         else
-            if [ -z "$REMOTE_OUTPUT_DIR" ]
+            if [[ -z "$REMOTE_OUTPUT_DIR" ]] 
             then
                 OUTPUT_DIR="$PPSS_LOCAL_OUTPUT"
             else
@@ -2186,14 +2196,14 @@ commando () {
     # Decide if an item must be transfered from server to the node.
     # or be processed in-place (NFS / SMB mount?)
     #
-    if [ "$DOWNLOAD_TO_NODE" == "0" ]
+    if [[ "$DOWNLOAD_TO_NODE" == "0" ]] 
     then
-        if [ "$VIRTUAL" == "1" ]
+        if [[ "$VIRTUAL" == "1" ]] 
         then
             log DEBUG "Item is virtual, thus not downloading."
         else
             log DEBUG "Using item straight from the server, no copy."
-            if [ "$RECURSION" == "0" ]
+            if [[ "$RECURSION" == "0" ]] 
             then
                 ITEM="$SRC_DIR/$ITEM"
             else
@@ -2202,7 +2212,7 @@ commando () {
         fi
     else
         download_item "$ITEM"
-        if [ "$RECURSION" == "1" ]
+        if [[ "$RECURSION" == "1" ]] 
         then
             ITEM="$PPSS_LOCAL_TMPDIR/$HASH/$ITEM_BASE_NAME"
         else
@@ -2213,15 +2223,15 @@ commando () {
     #
     # Create the log file containing the output of the command.
     #
-    if [ "$USE_MD5" == "1" ]
+    if [[ "$USE_MD5" == "1" ]] 
     then
-        LOG_FILE_NAME=`echo "$ITEM" | $MD5 | awk '{ print $1 }'`
+        LOG_FILE_NAME=$(echo "$ITEM" | $MD5 | awk '{ print $1 }')
     else
-        LOG_FILE_NAME=`echo "$ITEM" | sed s/[^[:alnum:]]/_/g`
+        LOG_FILE_NAME=$(echo "$ITEM" | sed s/[^[:alnum:]]/_/g)
     fi
     ITEM_LOG_FILE="$JOB_LOG_DIR/$LOG_FILE_NAME"
 
-    if [ -e "$ITEM_LOG_FILE" ] && [ "$DISABLE_SKIPPING" = "0" ]
+    if [[ -e "$ITEM_LOG_FILE" && "$DISABLE_SKIPPING" == "0" ]] 
     then
         log DEBUG "Item is already processed, skipping..."  
         start_new_worker
@@ -2231,7 +2241,7 @@ commando () {
     #
     # Create the local output directory.
     #
-    if [ ! -z "$OUTPUT_DIR" ]
+    if [[ ! -z "$OUTPUT_DIR" ]] 
     then
         log DEBUG "Creating local output dir $OUTPUT_DIR"
         mkdir -p "$OUTPUT_DIR"
@@ -2242,7 +2252,7 @@ commando () {
     #
     # Some formatting of item log files. 
     #
-    DATE=`date +%b\ %d\ %H:%M:%S`
+    DATE=$(date +%b\ %d\ %H:%M:%S)
     echo "===== PPSS Item Log File =====" > "$ITEM_LOG_FILE"
     echo -e "Host:\t\t$HOSTNAME" >> "$ITEM_LOG_FILE"
     echo -e "Process:\t$PID" >> "$ITEM_LOG_FILE"
@@ -2258,10 +2268,10 @@ commando () {
     # Check for "$ITEM" or "${ITEM" in the command line.
     # ${ITEM} allows the usage of string operations.
 
-    BEFORE=`get_time_in_seconds`
-    `echo $COMMAND | grep -E -i '\$\{ITEM' >> /dev/null 2>&1`
+    BEFORE=$(get_time_in_seconds)
+    $(echo $COMMAND | grep -E -i '\$\{ITEM' >> /dev/null 2>&1)
     RETVAL="$?"
-    if [ "$RETVAL" = "0" ]
+    if [[ "$RETVAL" == "0" ]] 
     then 
         eval "$COMMAND" >> "$ITEM_LOG_FILE" 2>&1
         ERROR="$?"
@@ -2271,17 +2281,18 @@ commando () {
         ERROR="$?"
         MYPID="$!"
     fi
-    AFTER=`get_time_in_seconds`
+    AFTER=$(get_time_in_seconds)
 
     echo -e "" >> "$ITEM_LOG_FILE"
 
     # Some error logging. Success or fail.
-    if [ ! "$ERROR" == "0" ] 
+    if [[ ! "$ERROR" == "0" ]] 
     then
        mail_on_error "$ITEM" "$ITEM_LOG_FILE"
        log DEBUG "Processing Item $ITEM failed."
        echo "$FAIL_KEY" >> "$FIFO" 
        echo -e "Status:\t\tFAILURE" >> "$ITEM_LOG_FILE"
+       add_item_to_failed_list "$ORIG_ITEM"
     else
        echo -e "Status:\t\tSUCCESS" >> "$ITEM_LOG_FILE"
     fi
@@ -2290,9 +2301,9 @@ commando () {
     # If part of a cluster, remove the downloaded item after 
     # it has been processed and uploaded as not to fill up disk space.
     #
-    if [ "$DOWNLOAD_TO_NODE" == "1" ] 
+    if [[ "$DOWNLOAD_TO_NODE" == "1" ]] 
     then
-        if [ -e "$ITEM" ]
+        if [[ -e "$ITEM" ]] 
         then
             rm -rf "$ITEM"
         else        
@@ -2305,10 +2316,10 @@ commando () {
     # Upload the output file back to the server.
     #
 
-    if [ "$UPLOAD_TO_SERVER" == "1" ]
+    if [[ "$UPLOAD_TO_SERVER" == "1" ]] 
     then
         log DEBUG "Upload $OUTPUT_DIR and ITEM DIR NAME IS $ITEM_DIR_NAME"
-        if [ "$ITEM_DIR_NAME" == "." ]
+        if [[ "$ITEM_DIR_NAME" == "." ]] 
         then
             ITEM_DIR_NAME=""
         fi
@@ -2326,10 +2337,10 @@ commando () {
     
     echo -e "" >> "$ITEM_LOG_FILE"
 
-    if [ ! -z "$SSH_SERVER" ]
+    if [[ ! -z "$SSH_SERVER" ]] 
     then
         scp -q $SSH_OPTS $SSH_KEY "$ITEM_LOG_FILE" $USER@$SSH_SERVER:$PPSS_HOME_DIR/$JOB_LOG_DIR
-        if [ ! "$?" ]
+        if [[ ! "$?" ]] 
         then
             log DEBUG "Uploading of item log file failed."
         fi
@@ -2350,16 +2361,16 @@ infanticide () {
     # process as defined by $PID. All processes that have ever been
     # spawned, although disowned or backgrounded will be killed...
     #
-    PROCLIST=`ps a -o pid,pgid,ppid,command | grep [0-9] | grep $PID | grep -v -i grep`
+    PROCLIST=$(ps a -o pid,pgid,ppid,command | grep [0-9] | grep $PID | grep -v -i grep)
     oldIFS=$IFS # save the field separator
     IFS=$'\n' # new field separator, the end of line  
-    for x in `echo "$PROCLIST"`
+    for x in $(echo "$PROCLIST")
     do
-        MYPPID=`echo $x | awk '{ print $3 }'`
-        MYPID=`echo $x | awk '{ print $1 }'`
-        if [ ! "$MYPPID" == "$PID" ] && [ ! "$MYPPID" == "1" ]
+        MYPPID=$(echo $x | awk '{ print $3 }')
+        MYPID=$(echo $x | awk '{ print $1 }')
+        if [[ ! "$MYPPID" == "$PID" && ! "$MYPPID" == "1" ]] 
         then
-            if [ ! "$MYPID" == "$PID" ] 
+            if [[ ! "$MYPID" == "$PID" ]] 
             then
                 log DEBUG "Killing process $MYPID"
                 kill $MYPID >> /dev/null 2>&1
@@ -2380,9 +2391,9 @@ run_command () {
     
     log DEBUG "Current active workers is $ACTIVE_WORKERS"
 
-    if [ "$ACTIVE_WORKERS" -lt "$MAX_NO_OF_RUNNING_JOBS" ]
+    if [[ "$ACTIVE_WORKERS" -lt "$MAX_NO_OF_RUNNING_JOBS" ]] 
     then
-        if [ -z "$INPUT" ]
+        if [[ -z "$INPUT" ]] 
         then
             stack_pop
             INPUT="$REGISTER"
@@ -2390,7 +2401,7 @@ run_command () {
 
         log INFO "Now processing $INPUT"
 
-        if [ ! -z "$INPUT" ] && [ ! -d "$INPUT" ]
+        if [[ ! -z "$INPUT" && ! -d "$INPUT" ]] 
         then
             commando "$INPUT" &
             MYPID="$!"
@@ -2411,12 +2422,12 @@ run_command () {
 
 display_jobs_remaining () {
 
-    if [ "$ACTIVE_WORKERS" == "1" ] && [ "$QUIET" == "0" ]
+    if [[ "$ACTIVE_WORKERS" == "1" && "$QUIET" == "0" ]] 
     then
         log PRCNT "One job is remaining.                                      "
-    elif [ "$QUIET" == "0" ]
+    elif [[ "$QUIET" == "0" ]] 
     then
-        if [ "$ACTIVE_WORKERS" == "1" ]
+        if [[ "$ACTIVE_WORKERS" == "1" ]] 
         then
             echo -en "\n"
         fi
@@ -2429,32 +2440,32 @@ show_eta () {
     CURRENT_PROCESSED=$((GLOBAL_COUNTER-MAX_NO_OF_RUNNING_JOBS))
     TOTAL="$SIZE_OF_INPUT"
     START_TIME=$START_PPSS
-    NOW=`get_time_in_seconds`
+    NOW=$(get_time_in_seconds)
     MODULO=$((GLOBAL_COUNTER % 5 ))
 
-    if [ "$QUIET" = "1" ]
+    if [[ "$QUIET" == "1" ]] 
     then
         return 0
     fi
 
-    if [ "$CURRENT_PROCESSED" -le "0" ] 
+    if [[ "$CURRENT_PROCESSED" -le "0" ]] 
     then 
         return 0
     else
-        if [ "$MODULO" = "0" ]
+        if [[ "$MODULO" == "0" ]] 
         then
             RUNNING_TIME=$((NOW-START_TIME))
-            if [ ! "$RUNNING_TIME" -le "0" ] && [ ! "$CURRENT_PROCESSED" = "0" ] && [ "$CURRENT_PROCESSED" -gt "$MAX_NO_OF_RUNNING_JOBS" ]
+            if [[ ! "$RUNNING_TIME" -le "0" && ! "$CURRENT_PROCESSED" == "0" ]] && [[ "$CURRENT_PROCESSED" -gt "$MAX_NO_OF_RUNNING_JOBS" ]] 
             then
                 TIME_PER_ITEM=$(( RUNNING_TIME / ( CURRENT_PROCESSED - MAX_NO_OF_RUNNING_JOBS ) )) 
                 log DEBUG "Time per item is $TIME_PER_ITEM seconds."
                 TOTAL_TIME=$(( ($TIME_PER_ITEM * SIZE_OF_INPUT) + $TIME_PER_ITEM ))
                 TOTAL_TIME_IN_SECONDS=$((START_TIME+TOTAL_TIME))
-                if [ "$ARCH" = "Darwin" ]
+                if [[ "$ARCH" == "Darwin" ]] 
                 then
-                    DATE=`date -r $TOTAL_TIME_IN_SECONDS`
+                    DATE=$(date -r $TOTAL_TIME_IN_SECONDS)
                 else
-                    DATE=`date -d @$TOTAL_TIME_IN_SECONDS`
+                    DATE=$(date -d @$TOTAL_TIME_IN_SECONDS)
                 fi
                 echo
                 log DSPLY "ETA: $DATE"
@@ -2466,31 +2477,31 @@ show_eta () {
 
 display_progress () {
 
-    if [ "$DAEMON" = "0" ]
+    if [[ "$DAEMON" == "0" ]] 
     then
         SIZE_OF_INPUT=$(wc -l "$LISTOFITEMS" | awk '{ print $1 }')
         GC=0
-        if [ ! "$GLOBAL_COUNTER" -gt "$SIZE_OF_INPUT" ]
+        if [[ ! "$GLOBAL_COUNTER" -gt "$SIZE_OF_INPUT" ]] 
         then
             GC="$GLOBAL_COUNTER"
         else
             GC="$SIZE_OF_INPUT"
         fi
         PERCENT=$((100 * $GC / $SIZE_OF_INPUT ))
-        if [ ! "$ACTIVE_WORKERS" == "0" ] # && [ "$FINISHED" == "0" ] 
+        if [[ ! "$ACTIVE_WORKERS" == "0" ]] # && [[ "$FINISHED" == "0" ]] 
         then
-            if [ "$QUIET" == "0" ]
+            if [[ "$QUIET" == "0" ]] 
             then
                 log PRCNT "$PERCENT% complete. Processed $GC of $SIZE_OF_INPUT. Failed $FAILED_ITEMS_COUNTER/$SIZE_OF_INPUT." 
                 show_eta
-            elif [ "$DAEMON" == "0" ]
+            elif [[ "$DAEMON" == "0" ]] 
             then
                 echo -en "\r$PERCENT% --"
             fi
 
-            if [ "$PERCENT" == "100" ]
+            if [[ "$PERCENT" == "100" ]] 
             then
-                if [ "$QUIET" == "1" ]
+                if [[ "$QUIET" == "1" ]] 
                 then
                     echo
                 fi
@@ -2506,7 +2517,7 @@ terminate_listener () {
 
     log DEBUG "Running $FUNCNAME"
 
-    if [ ! -z "$SSH_MASTER_PID" ]
+    if [[ ! -z "$SSH_MASTER_PID" ]] 
     then
         kill "$SSH_MASTER_PID" 
     else
@@ -2516,7 +2527,7 @@ terminate_listener () {
     set_status "STOPPED" "$GLOBAL_FAILED_COUNTER"
     log DEBUG "Listener stopped."
 
-    if [ ! "$PERCENT" == "100" ]
+    if [[ ! "$PERCENT" == "100" ]] 
     then
         echo
 	    stop-ppss
@@ -2527,15 +2538,15 @@ terminate_listener () {
 	    stop-ppss
         log DSPLY "Finished. Consult $JOB_LOG_DIR for job output."
     fi
-    if [ "$QUIET" == "1" ]
+    if [[ "$QUIET" == "1" ]] 
     then
         echo 
     fi
 
-    if [ ! -z "$EMAIL" ]  
+    if [[ ! -z "$EMAIL" ]]  
     then
         echo  "|P|P|S|S| job finished." | mail -s "$HOSTNAME - PPSS has finished." "$EMAIL"
-        if [ ! "$?" = "0" ]
+        if [[ ! "$?" == "0" ]] 
         then 
             log ERROR "Sending os status mail failed."
         fi
@@ -2549,7 +2560,7 @@ inotify_listener () {
     inotifywait "$SRC_DIR" -m -r -e close -q --format '%w%f' | \
     while read -r line
     do
-        if [ ! -d "$line" ]
+        if [[ ! -d "$line" ]] 
         then
             echo "$line" > "$FIFO"
         fi
@@ -2561,7 +2572,7 @@ is_item_unprocessed () {
     VAR="$1"
     STATUS=0
 
-    if [ -z "$VAR" ]
+    if [[ -z "$VAR" ]] 
     then
         log DEBUG "$FUNCNAME: something is wrong, no argument received."
         return 1
@@ -2569,7 +2580,7 @@ is_item_unprocessed () {
 
     for x in $PROCESSED_ITEMS
     do
-        if [ "$x" = "$VAR" ]
+        if [[ "$x" == "$VAR" ]] 
         then
             STATUS=1
         fi
@@ -2584,12 +2595,12 @@ is_item_file_and_unmodified () {
 
     ITEM="$1"
 
-    if [ -e "$ITEM" ]
+    if [[ -e "$ITEM" ]] 
     then
-        NOW=`date +%s`
-        FILEDATE=`$STAT "$ITEM"`
+        NOW=$(date +%s)
+        FILEDATE=$($STAT "$ITEM")
         ELAPSED="$(expr $NOW - $FILEDATE)"
-        if [ "$ELAPSED" -gt "$DAEMON_FILE_AGE" ]
+        if [[ "$ELAPSED" -gt "$DAEMON_FILE_AGE" ]] 
         then
             log DEBUG "$FUNCNAME File $ITEM is aged $ELAPSED"
             return 0
@@ -2654,10 +2665,10 @@ start_inotify_listener () {
 
 start_as_daemon () {
 
-    if [ "$DAEMON" = "1" ] 
+    if [[ "$DAEMON" == "1" ]] 
     then
         log DEBUG "Daemon mode enabled."
-        if [ "$INOTIFY" = "1" ]
+        if [[ "$INOTIFY" == "1" ]] 
         then
             log INFO "Linux inotify enabled."
             start_inotify_listener
@@ -2672,7 +2683,7 @@ start_as_daemon () {
 
 decrease_active_workers () {
 
-    if [ "$ACTIVE_WORKERS" -gt "0" ]
+    if [[ "$ACTIVE_WORKERS" -gt "0" ]] 
     then
         ((ACTIVE_WORKERS--))
     fi
@@ -2691,13 +2702,13 @@ listen_for_job () {
     do
         log INFO "Current active workers is $ACTIVE_WORKERS"
 
-        if [ "$event" == "$START_KEY" ]
+        if [[ "$event" == "$START_KEY" ]] 
         then
             decrease_active_workers
 
             log DEBUG "Got a 'start-key' event"
 
-            if [ "$DAEMON" == "0" ]
+            if [[ "$DAEMON" == "0" ]] 
             then
                 if get_item
                 then
@@ -2705,7 +2716,7 @@ listen_for_job () {
                     run_command "$ITEM"
                 else
                     log DEBUG "No more new items..."
-                    if [ "$ACTIVE_WORKERS" = "0" ]
+                    if [[ "$ACTIVE_WORKERS" == "0" ]] 
                     then
                         display_progress 
                         break
@@ -2717,11 +2728,11 @@ listen_for_job () {
                 log DEBUG "Daemon mode: a worker finished..."
                 run_command 
             fi
-        elif [ "$event" == "$FAIL_KEY" ]
+        elif [[ "$event" == "$FAIL_KEY" ]] 
         then
             ((FAILED_ITEMS_COUNTER++))
             log DEBUG "An item failed to process. $FAILED_ITEMS_COUNTER"
-        elif [ "$event" == "$KILL_KEY" ]
+        elif [[ "$event" == "$KILL_KEY" ]] 
         then
             infanticide
             break
@@ -2742,29 +2753,29 @@ listen_for_job () {
 
 start_all_workers () {
 
-    if [ "$MAX_NO_OF_RUNNING_JOBS" == "1" ]
+    if [[ "$MAX_NO_OF_RUNNING_JOBS" == "1" ]] 
     then
         log DSPLY "Starting one (1) single worker."
     else
         log DSPLY "Starting $MAX_NO_OF_RUNNING_JOBS parallel workers."
     fi
 
-    if [ "$DAEMON" == "0" ]
+    if [[ "$DAEMON" == "0" ]] 
     then
         log DSPLY "---------------------------------------------------------"
-    elif [ "$INOTIFY" = "1" ]
+    elif [[ "$INOTIFY" == "1" ]] 
     then
         return 0
     fi
 
     i=0
-    while [ "$i" -lt "$MAX_NO_OF_RUNNING_JOBS" ]
+    while [[ "$i" -lt "$MAX_NO_OF_RUNNING_JOBS" ]] 
     do
         start_new_worker
         log DEBUG "Starting worker $i"
         ((i++))
 
-        if [ ! "$MAX_DELAY" == "0" ]
+        if [[ ! "$MAX_DELAY" == "0" ]] 
         then
             random_delay "$MAX_DELAY"
         fi
@@ -2777,7 +2788,7 @@ get_status_of_nodes () {
     FAILED=0
 
     ssh -q $SSH_OPTS $SSH_KEY $USER@$SSH_SERVER cat "$PPSS_HOME_DIR/$PPSS_NODE_STATUS/*" > "$RESULT_FILE" 2>&1
-    if [ ! "$?" == "0" ]
+    if [[ ! "$?" == "0" ]] 
     then
         log DSPLY "|P|P|S|S| has not been started yet on nodes."
         return 1
@@ -2785,25 +2796,25 @@ get_status_of_nodes () {
 
     IFS=$'\n'
 
-    for x in `cat $RESULT_FILE`
+    for x in $(cat $RESULT_FILE)
     do
-        IP=`echo $x | awk '{ print $1 }'`
-        HOST=`echo $x | awk '{ print $2 }'`
-        STATUS=`echo $x | awk '{ print $3 }'`
-        RES=`echo $x | awk '{ print $4 }'`
-        FAIL=`echo $x | awk '{ print $5 }'`
-        if [ -z "$RES" ]
+        IP=$(echo $x | awk '{ print $1 }')
+        HOST=$(echo $x | awk '{ print $2 }')
+        STATUS=$(echo $x | awk '{ print $3 }')
+        RES=$(echo $x | awk '{ print $4 }')
+        FAIL=$(echo $x | awk '{ print $5 }')
+        if [[ -z "$RES" ]] 
         then
             RES="0"
         fi
         PROCESSED=$((PROCESSED+RES))
         FAILED=$((FAILED+FAIL))
-        LINE=`echo "$IP $HOST $RES $FAIL $STATUS" | awk '{ printf ("%-16s %-16s % 8s %6s %7s\n",$1,$2,$3,$4,$5) }'`
+        LINE=$(echo "$IP $HOST $RES $FAIL $STATUS" | awk '{ printf ("%-16s %-16s % 8s %6s %7s\n",$1,$2,$3,$4,$5) }')
         log DSPLY "$LINE"
     done    
 
     log DSPLY "---------------------------------------------------------"
-    LINE=`echo $PROCESSED $FAILED | awk '{ printf ("Total processed/failed: %18s %6s \n",$1,$2) }'`
+    LINE=$(echo $PROCESSED $FAILED | awk '{ printf ("Total processed/failed: %18s %6s \n",$1,$2) }')
     log DSPLY "$LINE"
 
     rm "$RESULT_FILE"
@@ -2814,17 +2825,17 @@ show_status () {
 
     . $CONFIG
 
-    if [ ! -z "$SSH_KEY" ]
+    if [[ ! -z "$SSH_KEY" ]] 
     then
         SSH_KEY="-i $SSH_KEY"
     fi
     get_all_items
 
-    ITEMS=`wc -l $LISTOFITEMS | awk '{ print $1 }'`
+    ITEMS=$(wc -l $LISTOFITEMS | awk '{ print $1 }')
     
-    if [ ! -z "$ITEMS" ] && [ ! "$ITEMS" == "0" ]
+    if [[ ! -z "$ITEMS" && ! "$ITEMS" == "0" ]] 
     then
-        PROCESSED=`exec_cmd "ls -1 $PPSS_HOME_DIR/$ITEM_LOCK_DIR 2>/dev/null | wc -l" 1` 2>&1 >> /dev/null
+        PROCESSED=$(exec_cmd "ls -1 $PPSS_HOME_DIR/$ITEM_LOCK_DIR 2>/dev/null | wc -l" 1) 2>&1 >> /dev/null
         check_status "$?" "Could not get number of processed items."
         TMP_STATUS=$((100 * $PROCESSED / $ITEMS))
         log DSPLY "Status:\t\t$TMP_STATUS percent complete."
@@ -2832,15 +2843,15 @@ show_status () {
         log DSPLY "Status: UNKNOWN - is PPSS deployed on nodes?"
     fi
 
-    if [ ! -z $NODES_FILE ]
+    if [[ ! -z $NODES_FILE ]] 
     then
-        TMP_NO=`cat $NODES_FILE | wc -l`
+        TMP_NO=$(cat $NODES_FILE | wc -l)
         log DSPLY "Nodes:\t $TMP_NO"
     fi
     log DSPLY "Items:\t\t$ITEMS"
 
     log DSPLY "---------------------------------------------------------"
-    HEADER=`echo IP-address Hostname Processed Failed Status | awk '{ printf ("%-16s %-15s % 2s %2s %2s\n",$1,$2,$3,$4,$5) }'`  
+    HEADER=$(echo IP-address Hostname Processed Failed Status | awk '{ printf ("%-16s %-15s % 2s %2s %2s\n",$1,$2,$3,$4,$5) }')  
     log DSPLY "$HEADER"
     log DSPLY "---------------------------------------------------------"
     PROCESSED=0
@@ -2865,14 +2876,14 @@ main () {
                     # This option only starts all nodes.
                     LOGFILE=/dev/null
                     display_header
-                    if [ ! -e "$NODES_FILE" ]
+                    if [[ ! -e "$NODES_FILE" ]] 
                     then
                         log ERROR "File $NODES with list of nodes does not exist."
                         set_status "STOPPED"
                         cleanup
                         exit 1
                     else
-                        for NODE in `cat $NODES_FILE`
+                        for NODE in $(cat $NODES_FILE)
                         do
                             start_ppss_on_node "$NODE" &
                         done
@@ -2920,7 +2931,7 @@ main () {
                     ;;
         deploy )
                     LOGFILE=ppss-deploy.txt
-                    if [ -e "$LOGFILE" ]
+                    if [[ -e "$LOGFILE" ]] 
                     then
                         rm "$LOGFILE"
                     fi
@@ -2948,7 +2959,7 @@ main () {
                     ;;
         kill )
                     LOGFILE=/dev/null
-                    for x in `ps ux | grep ppss | grep -v grep | grep bash | awk '{ print $2 }'`
+                    for x in $(ps ux | grep ppss | grep -v grep | grep bash | awk '{ print $2 }')
                     do          
                          kill "$x"
                     done
@@ -2987,7 +2998,7 @@ then
     # Exit after all processes have finished.
     #
     #wait 
-    if [ -e "$FIFO_LISTENER" ]
+    if [[ -e "$FIFO_LISTENER" ]] 
     then
         while read event <& 43
         do
