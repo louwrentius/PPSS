@@ -83,7 +83,7 @@ FAIL_KEY="fail-$RANDOM$RANDOM$RANDOM$RANDOM"            # if this key is receive
 KILL_KEY="kill-$RANDOM$RANDOM$RANDOM$RANDOM"            # This is a signal to stop immediately and kill PPSS
 QUEUE=""
 INOTIFY=""
-RECURSION="1"                                           # all running processes.
+TRAVERSAL="1"                                           # all running processes.
 START_PPSS=""
 STOP_PPSS=""
 SIZE_OF_INPUT=""
@@ -222,9 +222,11 @@ showusage_basic () {
     echo -e "                   daemon mode. Requires inotify-tools. Enabled by default if available."
     echo -e "                   Automatically disabled if NFS is used as the daeon source dir."
     echo
-    echo -e "--no-recursion|-r  By default, recursion of directories is enabled when the -d option is "
-    echo -e "                   used. If this is not prefered, this can be disabled with this option "
-    echo -e "                   Only files within the specified directory will be processed."
+    echo -e "--no-traversal|-r  By default, PPSS uses the regular 'find' command to list all files"
+    echo -e "                   within the directory specified by the -d option. If you do not wish"
+    echo -e "                   for PPSS to process files in sub directories, use this option."
+    echo -e "                   Only files within the specified directory will be processed. Any"
+    echo -e "                   subdirectories will then be ignored."
     echo 
     echo -e "--email | -e       PPSS sends an e-mail if PPSS has finished. It is also used if processing"
     echo -e "                   of an item has failed (configurable, see -h). "
@@ -665,9 +667,9 @@ process_arguments () {
                             LOGFILE="$2"
                             add_var_to_config LOGFILE "$LOGFILE"
                             shift 2 ;;
-          --no-recursion|-r )
-                            RECURSION="0"
-                            add_var_to_config LOGFILE "$RECURSION"
+          --no-traversal|-r )
+                            TRAVERSAL="0"
+                            add_var_to_config LOGFILE "$TRAVERSAL"
                             shift 1 ;;
            --workingdir|-w ) 
                             WORKINGDIR="$2"
@@ -1598,7 +1600,7 @@ download_item () {
     ERR_STATE="0"
     HASH=""
 
-    if [[ "$RECURSION" == "1" ]] 
+    if [[ "$TRAVERSAL" == "1" ]] 
     then
         escape_item "$ITEM"
         does_file_exist "$ITEM_ESCAPED"
@@ -1628,7 +1630,7 @@ download_item () {
         log DEBUG "Transfering item $ITEM from source to local disk."
         if [[ "$SECURE_COPY" == "1" && ! -z "$SSH_SERVER" ]] 
         then
-            if [[ "$RECURSION" == "1" ]] 
+            if [[ "$TRAVERSAL" == "1" ]] 
             then
                 escape_item "$DOWNLOAD_ITEM" 
                 mkdir -p "$PPSS_LOCAL_TMPDIR/$LOCAL_DIR"
@@ -1662,7 +1664,7 @@ upload_item () {
     REMOTE_DEST_DIR="$2" # to recreate the directory structure
     DESTINATION=""
 
-    if [[ "$RECURSION" == "1" ]] 
+    if [[ "$TRAVERSAL" == "1" ]] 
     then 
         log DEBUG "Recursive copy is enabled."
         TMP_DESTINATION="$REMOTE_OUTPUT_DIR/$REMOTE_DEST_DIR" 
@@ -1838,7 +1840,7 @@ get_all_items () {
     then
         if [[ ! -z "$SSH_SERVER" ]] # Are we running stand-alone or as a node?"
         then
-            if [[ "$RECURSION" == "1" ]] 
+            if [[ "$TRAVERSAL" == "1" ]] 
             then
                 $(exec_cmd "find $SRC_DIR/ ! -type d" > "$LISTOFITEMS")
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
@@ -1851,7 +1853,7 @@ get_all_items () {
         else 
             if [[ -e "$SRC_DIR" ]] 
             then
-                if [[ "$RECURSION" == "1" ]] 
+                if [[ "$TRAVERSAL" == "1" ]] 
                 then
                     log DEBUG "Recursion is enabled."
                     $(find "$SRC_DIR"/ ! -type d >> "$LISTOFITEMS") 
@@ -2116,7 +2118,7 @@ commando () {
 
     #log DEBUG "$FUNCNAME is processing item $ITEM"
 
-    if [[ "$RECURSION" == "1" ]] 
+    if [[ "$TRAVERSAL" == "1" ]] 
     then
         escape_item "$ITEM"
         does_file_exist "$ITEM_ESCAPED" # The item contains the full path.
@@ -2139,7 +2141,7 @@ commando () {
     if [[ "$ERR_STATE" == "0" ]] 
     then
         VIRTUAL="0"
-        if [[ "$RECURSION" == "1" ]] 
+        if [[ "$TRAVERSAL" == "1" ]] 
         then
             ITEM_DIR_NAME=$(dirname "$ITEM" | sed s:$SRC_DIR::g)
             ITEM_BASE_NAME=$(basename "$ITEM")
@@ -2197,7 +2199,7 @@ commando () {
             log DEBUG "Item is virtual, thus not downloading."
         else
             log DEBUG "Using item straight from the server, no copy."
-            if [[ "$RECURSION" == "0" ]] 
+            if [[ "$TRAVERSAL" == "0" ]] 
             then
                 ITEM="$SRC_DIR/$ITEM"
             else
@@ -2206,7 +2208,7 @@ commando () {
         fi
     else
         download_item "$ITEM"
-        if [[ "$RECURSION" == "1" ]] 
+        if [[ "$TRAVERSAL" == "1" ]] 
         then
             ITEM="$PPSS_LOCAL_TMPDIR/$HASH/$ITEM_BASE_NAME"
         else
@@ -2263,7 +2265,7 @@ commando () {
     # ${ITEM} allows the usage of string operations.
 
     BEFORE=$(get_time_in_seconds)
-    $(echo $COMMAND | grep -E -i '\$\{ITEM' >> /dev/null 2>&1)
+    echo "$COMMAND" | grep -E -i '\$\{?ITEM' >> /dev/null 2>&1
     RETVAL="$?"
     if [[ "$RETVAL" == "0" ]] 
     then 
