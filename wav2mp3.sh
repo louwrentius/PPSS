@@ -8,7 +8,7 @@ TYPE=`file -b "$SRC"`
 RES=`echo "$TYPE" | grep "WAVE audio"`
 if [ ! "$?" == "0" ]
 then
-    echo "File $FILE is not a wav file..."
+    echo "File $SRC is not a wav file..."
     echo "Type is $TYPE"
     exit 0
 fi
