@@ -1722,12 +1722,7 @@ lock_item () {
     else
         ITEM="$1"
 
-        if [[ "$USE_MD5" == "1" ]] 
-        then
-            LOCK_FILE_NAME=$(echo "$ITEM" | $MD5 | awk '{ print $1 }')
-        else
-            LOCK_FILE_NAME=$(echo "$ITEM" | sed s/[^[:alnum:]]/_/g)
-        fi
+        LOCK_FILE_NAME=$(echo "$ITEM" | $MD5 | awk '{ print $1 }')
         ITEM_LOCK_FILE="$ITEM_LOCK_DIR/$LOCK_FILE_NAME"
         log DEBUG "Locking item $ITEM_LOCK_FILE"
         exec_cmd "mkdir $ITEM_LOCK_FILE >> /dev/null 2>&1"
