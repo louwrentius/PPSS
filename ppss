@@ -26,7 +26,7 @@
 trap 'kill_process' SIGINT 
 
 SCRIPT_NAME="Distributed Parallel Processing Shell Script"
-SCRIPT_VERSION="2.97"
+SCRIPT_VERSION="2.98"
 
 #
 # The first argument to this script can be a mode.
