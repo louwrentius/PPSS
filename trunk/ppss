@@ -851,7 +851,10 @@ get_time_in_seconds () {
         #
         # Dirty hack because this ancient operating system does not support +%s...
         #
-        THE_TIME=$(truss /usr/bin/date 2>&1 | grep ^time | awk '{ print $3 }')
+        # SWB: Clever, but horrible.  Use perl since I already created a dependency
+        # there by using it to fix sed and [[:alnum:]] not working.
+        #        THE_TIME=$(truss /usr/bin/date 2>&1 | grep ^time | awk '{ print $3 }')
+        THE_TIME=$(perl -e 'print time')
     else
         THE_TIME="$(date +%s)"
     fi
@@ -1848,7 +1851,15 @@ get_all_items () {
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             else
                 log DEBUG "Recursion is disabled."
-                $(exec_cmd "find $SRC_DIR/ -depth 1 ! -type d" > "$LISTOFITEMS")
+		# SWB: -depth takes no arguments.  I think he meant to use
+		# -maxdepth to limit search to just the source directory
+        # (But that won't work on Solaris.)  Try the -prune workaround
+        ##$(exec_cmd "find $SRC_DIR/ -maxdepth 1 ! -type d" > "$LISTOFITEMS")
+		# Use this to work around a problem using -name with an
+                # embedded / when SRC_DIR is more than one level deep.
+                _dir_basename=`basename "$SRC_DIR"`
+                $(exec_cmd "find \"$SRC_DIR\" ( ! -name \"$_dir_basename\" -o -type f ) -prune -type f -print" > "$LISTOFITEMS")
+
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             fi
 
@@ -1862,7 +1873,13 @@ get_all_items () {
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 else
                     log DEBUG "Recursion is disabled."
-                    $(find "$SRC_DIR"/ -depth 1 ! -type d >> "$LISTOFITEMS")
+		    # SWB: see above depth vs. maxdepth comment and Solaris
+                    # brain-deadness workaround.
+                    ##$(find "$SRC_DIR"/ -maxdepth 1 ! -type d >> "$LISTOFITEMS")
+		    # Use this to work around a problem using -name with an
+                    # embedded / when SRC_DIR is more than one level deep.
+                    _dir_basename=`basename "$SRC_DIR"`
+                    $(find "$SRC_DIR" \( ! -name "$_dir_basename" -o -type f \) -prune -type f -print > "$LISTOFITEMS")
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 fi
                 if [[ ! -e "$LISTOFITEMS" ]] 
@@ -2225,7 +2242,12 @@ commando () {
     then
         LOG_FILE_NAME=$(echo "$ITEM" | $MD5 | awk '{ print $1 }')
     else
-        LOG_FILE_NAME=$(echo "$ITEM" | sed s/[^[:alnum:]]/_/g)
+        if [[ "$ARCH" != "SunOS" ]]
+        then
+            LOG_FILE_NAME=$(echo "$ITEM" | sed s/[^[:alnum:]]/_/g)
+        else
+            LOG_FILE_NAME=$(echo "$ITEM" | perl -p -e 'chomp;s/\W/_/g')
+        fi
     fi
     ITEM_LOG_FILE="$JOB_LOG_DIR/$LOG_FILE_NAME"
 
@@ -2267,8 +2289,15 @@ commando () {
     # ${ITEM} allows the usage of string operations.
 
     BEFORE=$(get_time_in_seconds)
-    echo "$COMMAND" | grep -E -i '\$\{?ITEM' >> /dev/null 2>&1
-    RETVAL="$?"
+    # SWB: Solaris default grep (/usr/bin/grep) doesn't support -E
+    if [[ "$ARCH" == "SunOS" ]]
+    then
+        echo "$COMMAND" | /usr/xpg4/bin/grep -E -i '\$\{?ITEM' >> /dev/null 2>&1
+        RETVAL="$?"
+    else
+        echo "$COMMAND" | grep -E -i '\$\{?ITEM' >> /dev/null 2>&1
+        RETVAL="$?"
+    fi
     if [[ "$RETVAL" == "0" ]] 
     then 
         eval "$COMMAND" >> "$ITEM_LOG_FILE" 2>&1
@@ -2359,7 +2388,14 @@ infanticide () {
     # process as defined by $PID. All processes that have ever been
     # spawned, although disowned or backgrounded will be killed...
     #
-    PROCLIST=$(ps a -o pid,pgid,ppid,command | grep [0-9] | grep $PID | grep -v -i grep)
+    # SWB: Fix ps command on Solaris, uses -e instead of a for all procs
+    # and "comm" instead of "command" in the format specification.
+    if [[ "$ARCH" == "SunOS" ]]
+    then 
+        PROCLIST=$(ps -e -o pid,pgid,ppid,comm | grep [0-9] | grep $PID | grep -v -i grep)
+    else
+        PROCLIST=$(ps a -o pid,pgid,ppid,command | grep [0-9] | grep $PID | grep -v -i grep)
+    fi
     oldIFS=$IFS # save the field separator
     IFS=$'\n' # new field separator, the end of line  
     for x in $(echo "$PROCLIST")
@@ -2462,6 +2498,10 @@ show_eta () {
                 if [[ "$ARCH" == "Darwin" ]] 
                 then
                     DATE=$(date -r $TOTAL_TIME_IN_SECONDS)
+                elif [[ "$ARCH" == "SunOS" ]]
+                then
+                    # SWB: Hack around Solaris' feeble date command
+                    DATE=$(perl -e "print scalar localtime($TOTAL_TIME_IN_SECONDS)")
                 else
                     DATE=$(date -d @$TOTAL_TIME_IN_SECONDS)
                 fi
