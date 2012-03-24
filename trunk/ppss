@@ -1851,15 +1851,18 @@ get_all_items () {
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             else
                 log DEBUG "Recursion is disabled."
-		# SWB: -depth takes no arguments.  I think he meant to use
-		# -maxdepth to limit search to just the source directory
-        # (But that won't work on Solaris.)  Try the -prune workaround
-        ##$(exec_cmd "find $SRC_DIR/ -maxdepth 1 ! -type d" > "$LISTOFITEMS")
-		# Use this to work around a problem using -name with an
-                # embedded / when SRC_DIR is more than one level deep.
-                _dir_basename=`basename "$SRC_DIR"`
-                $(exec_cmd "find \"$SRC_DIR\" ( ! -name \"$_dir_basename\" -o -type f ) -prune -type f -print" > "$LISTOFITEMS")
-
+                if [[ "$ARCH" != "SunOS" ]]
+                then
+                    $(exec_cmd "find $SRC_DIR/ -maxdepth 1 ! -type d" > "$LISTOFITEMS")
+                else
+                    # SWB: -depth takes no arguments.  I think he meant to use
+                    # -maxdepth to limit search to just the source directory
+                    # (But that won't work on Solaris.)  Try the -prune workaround
+                    # Use this to work around a problem using -name with an
+                    # embedded / when SRC_DIR is more than one level deep.
+                    _dir_basename=`basename "$SRC_DIR"`
+                    $(exec_cmd "find \"$SRC_DIR\" ( ! -name \"$_dir_basename\" -o -type f ) -prune ! -type d -print" > "$LISTOFITEMS")
+                fi
                 check_status "$?" "$FUNCNAME" "Could not list files within remote source directory."
             fi
 
@@ -1873,13 +1876,18 @@ get_all_items () {
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 else
                     log DEBUG "Recursion is disabled."
-		    # SWB: see above depth vs. maxdepth comment and Solaris
-                    # brain-deadness workaround.
-                    ##$(find "$SRC_DIR"/ -maxdepth 1 ! -type d >> "$LISTOFITEMS")
-		    # Use this to work around a problem using -name with an
-                    # embedded / when SRC_DIR is more than one level deep.
-                    _dir_basename=`basename "$SRC_DIR"`
-                    $(find "$SRC_DIR" \( ! -name "$_dir_basename" -o -type f \) -prune -type f -print > "$LISTOFITEMS")
+                    if [[ "$ARCH" != "SunOS" ]]
+                    then
+                        $(find "$SRC_DIR"/ -maxdepth 1 ! -type d >> "$LISTOFITEMS")
+                    else
+                        #
+		                # SWB: see above depth vs. maxdepth comment and Solaris
+                        # brain-deadness workaround.
+		                # Use this to work around a problem using -name with an
+                        # embedded / when SRC_DIR is more than one level deep.
+                        _dir_basename=`basename "$SRC_DIR"`
+                        $(find "$SRC_DIR" \( ! -name "$_dir_basename" -o -type f \) -prune ! -type d -print > "$LISTOFITEMS")
+                    fi
                     check_status "$?" "$FUNCNAME" "Could not list files within local source directory."
                 fi
                 if [[ ! -e "$LISTOFITEMS" ]] 
