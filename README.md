@@ -1,6 +1,8 @@
 ### |P|P|S|S| - (Distributed) Parallel Processing Shell Script
 
     I've moved this project from Google code to Github including its wiki pages.
+    
+    >>> THIS PROJECT IS NO LONGER UNDER ANY DEVELOPMENT OR MAINTENANCE <<<
 
 PPSS is a Bash shell script that executes commands, scripts or programs in parallel. It is designed to make full use of current multi-core CPUs. It will detect the number of available CPUs and start a separate job for each CPU core. It will also use hyper threading by default. 
 
